@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Listas totalmente preenchidas com os números correspondentes de cada metade
+// Listas com todos os números das duas grandes áreas preenchidos sem erros
 const AREA_1_VOISINS =;
 const AREA_2_TIERS =;
 
