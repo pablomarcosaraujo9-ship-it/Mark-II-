@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Mapeamento exato das duas grandes áreas que fundimos
+// Mapeamento exato e completo das duas grandes áreas da roleta
 const AREA_1_VOISINS =;
 const AREA_2_TIERS =;
 
@@ -20,22 +20,18 @@ app.post(WEBHOOK_PATH, (req, res) => {
   bot.handleUpdate(req.body, res);
 });
 
-// Mensagem de boas-vindas modificada
 bot.start((ctx) => {
   ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nDigite o número que acabou de sair na roleta (0 a 36) para receber o sinal de cobertura imediato.', { parse_mode: 'Markdown' });
 });
 
-// Processamento dos números ao vivo
 bot.on('text', async (ctx) => {
   const texto = ctx.message.text.trim();
   const numero = parseInt(texto, 10);
 
-  // Validação: checa se é um número válido da roleta
   if (isNaN(numero) || numero < 0 || numero > 36 || texto !== numero.toString()) {
     return ctx.reply('⚠️ Por favor, digite apenas um número válido entre 0 e 36.');
   }
 
-  // Tratamento especial para o Coringa (Número 0)
   if (numero === 0) {
     return ctx.reply(
       `🟢 *Gatilho: Número 0 (Coringa)*\n\n` +
@@ -44,7 +40,6 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // Análise da ÁREA 1
   if (AREA_1_VOISINS.includes(numero)) {
     return ctx.reply(
       `🔴 *SINAL ATIVADO: ÁREA 1 (Lado do Zero)*\n` +
@@ -57,7 +52,6 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // Análise da ÁREA 2
   if (AREA_2_TIERS.includes(numero)) {
     return ctx.reply(
       `🔵 *SINAL ATIVADO: ÁREA 2 (Lado do Tiers)*\n` +
