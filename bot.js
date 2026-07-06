@@ -13,6 +13,10 @@ const textoTiers = "6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9";
 const AREA_1_VOISINS = textoVoisins.split(',').map(n => parseInt(n, 10));
 const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 
+// Definição exata dos números dos cavalos sugeridos para validação do placar
+const CAVALOS_AREA_1 =;
+const CAVALOS_AREA_2 =;
+
 // Variáveis de controle de tendência e PLACAR
 let ultimasAreas = []; 
 let numHistorico = []; 
@@ -33,7 +37,6 @@ app.post(WEBHOOK_PATH, (req, res) => {
 async function limparChatCompleto(ctx) {
   const messageIdAtual = ctx.message.message_id;
   
-  // Tenta apagar as últimas 40 mensagens anteriores uma por uma
   for (let i = 0; i < 40; i++) {
     try {
       await ctx.deleteMessage(messageIdAtual - i);
@@ -59,13 +62,8 @@ bot.start(async (ctx) => {
 
 // Comando para limpar TODA a mesa antiga e reiniciar o placar
 bot.command('zerar', async (ctx) => {
-  // Executa a varredura para apagar o histórico visual do chat
   await limparChatCompleto(ctx);
-  
-  // Reseta os dados internos da roleta
   resetarDados();
-  
-  // Envia a mensagem limpa de nova mesa
   await ctx.reply('🔄 *Mesa Reiniciada com Sucesso!*\nTodo o histórico da mesa anterior foi apagado da tela.\n\n📊 Placar zerado. Pronto para os novos giros!', { parse_mode: 'Markdown' });
 });
 
@@ -81,15 +79,24 @@ bot.on('text', async (ctx) => {
   if (AREA_1_VOISINS.includes(numero)) areaAtual = "ÁREA 1";
   if (AREA_2_TIERS.includes(numero)) areaAtual = "ÁREA 2";
 
-  // 1. VERIFICAÇÃO DE GREEN OU RED + ATUALIZAÇÃO DO PLACAR
+  // 1. VERIFICAÇÃO REAL DE GREEN OU RED (AGORA BASEADA NOS CAVALOS EXATOS)
   let mensagemResultado = "";
   if (areaAlvoPendente !== null) {
-    if (areaAtual === areaAlvoPendente) {
+    let acertouCavalo = false;
+
+    // Checa se o número que saiu está na lista de cavalos da área sugerida
+    if (areaAlvoPendente === "ÁREA 1" && CAVALOS_AREA_1.includes(numero)) {
+      acertouCavalo = true;
+    } else if (areaAlvoPendente === "ÁREA 2" && CAVALOS_AREA_2.includes(numero)) {
+      acertouCavalo = true;
+    }
+
+    if (acertouCavalo) {
       contagemGreens++;
-      mensagemResultado = "🎉 *GREEN DETECTADO! Alvo atingido com sucesso!* 💰\n\n";
+      mensagemResultado = "🎉 *GREEN DETECTADO! Alvo atingido com sucesso nos cavalos!* 💰\n\n";
     } else if (numero !== 0) {
       contagemReds++;
-      mensagemResultado = "⚪ *Red na rodada.* A tendência não confirmou. Proteja sua banca!\n\n";
+      mensagemResultado = "⚪ *Red na rodada.* O número não estava nos cavalos sugeridos. Proteja sua banca!\n\n";
     }
     areaAlvoPendente = null; 
   }
@@ -120,7 +127,6 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant2 === ant1 && atual !== ant1) {
-      // SURFE RESPIRO 1: Segue a força da nova área (atual)
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `🔥 *ALERTA DE SURFE (Respiro de 1 casa)!*\n` +
@@ -139,7 +145,6 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant3 === ant2 && ant1 !== ant2 && atual !== ant2) {
-      // SURFE RESPIRO 2: A nova área continuou repetindo
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `⚡ *ALERTA MÁXIMO DE SURFE (Respiro de 2 casas)!*\n` +
