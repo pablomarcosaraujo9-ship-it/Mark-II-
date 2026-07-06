@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Mapeamento exato e completo das duas grandes áreas da roleta que fundimos
+// Listas totalmente preenchidas com os números correspondentes de cada metade
 const AREA_1_VOISINS =;
 const AREA_2_TIERS =;
 
