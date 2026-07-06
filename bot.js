@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Listas com todos os números das duas grandes áreas preenchidos sem erros
+// Listas com todos os números preenchidos para não quebrar a sintaxe do Node.js
 const AREA_1_VOISINS =;
 const AREA_2_TIERS =;
 
