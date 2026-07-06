@@ -13,9 +13,9 @@ const textoTiers = "6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9";
 const AREA_1_VOISINS = textoVoisins.split(',').map(n => parseInt(n, 10));
 const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 
-// Definição CORRIGIDA dos números dos cavalos sugeridos para validação do placar
-const CAVALOS_AREA_1 =;
-const CAVALOS_AREA_2 =;
+// Listas de validação criadas via array tradicional para evitar erros de sintaxe
+const CAVALOS_AREA_1 = Array.of(8, 9, 18, 19, 28, 29);
+const CAVALOS_AREA_2 = Array.of(7, 8, 27, 28);
 
 // Variáveis de controle de tendência e PLACAR
 let ultimasAreas = []; 
@@ -155,10 +155,10 @@ bot.on('text', async (ctx) => {
     }
   }
 
-  let corEmoji = areaAtual === "ÁREA 1" ? "🔴" : "🔵";
+  let colEmoji = areaAtual === "ÁREA 1" ? "🔴" : "🔵";
   
   ctx.reply(
-    `${mensagemResultado}${analiseDestaque}${corEmoji} *REGISTRO: ${areaAtual}*\n` +
+    `${mensagemResultado}${analiseDestaque}${colEmoji} *REGISTRO: ${areaAtual}*\n` +
     `O número ${numero} foi catalogado na sua tabela de tendências.\n\n${stringPainel}`,
     { parse_mode: 'Markdown' }
   );
