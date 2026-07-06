@@ -19,7 +19,6 @@ let numHistorico = [];
 let areaAlvoPendente = null; 
 let contagemGreens = 0;
 let contagemReds = 0;
-let mensagensParaApagar = []; // Guarda as IDs das mensagens da sessão
 
 app.get('/', (req, res) => {
   res.send('Projeto Mark II online e operando!');
@@ -30,55 +29,52 @@ app.post(WEBHOOK_PATH, (req, res) => {
   bot.handleUpdate(req.body, res);
 });
 
-// Função para resetar tudo e tentar limpar o chat
-async function resetarSessao(ctx) {
+// Função para varrer e limpar o chat em lote (apaga as últimas 40 mensagens)
+async function limparChatCompleto(ctx) {
+  const messageIdAtual = ctx.message.message_id;
+  
+  // Tenta apagar as últimas 40 mensagens anteriores uma por uma
+  for (let i = 0; i < 40; i++) {
+    try {
+      await ctx.deleteMessage(messageIdAtual - i);
+    } catch (err) {
+      // Ignora erros se a mensagem for muito antiga ou já deletada
+    }
+  }
+}
+
+// Inicialização padrão
+function resetarDados() {
   ultimasAreas = [];
   numHistorico = [];
   areaAlvoPendente = null;
   contagemGreens = 0;
   contagemReds = 0;
-
-  // Apaga as mensagens armazenadas na sessão anterior
-  if (ctx && mensagensParaApagar.length > 0) {
-    for (const msgId of mensagensParaApagar) {
-      try {
-        await ctx.deleteMessage(msgId);
-      } catch (err) {
-        // Ignora erros caso a mensagem já tenha sido apagada manualmente ou seja antiga
-      }
-    }
-  }
-  mensagensParaApagar = [];
 }
 
 bot.start(async (ctx) => {
-  await resetarSessao(ctx);
-  const msgSent = await ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa.\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
-  mensagensParaApagar.push(msgSent.message_id);
+  resetarDados();
+  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa.\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
 });
 
-// Comando para zerar e limpar as mensagens anteriores automaticamente
+// Comando para limpar TODA a mesa antiga e reiniciar o placar
 bot.command('zerar', async (ctx) => {
-  // Guarda a mensagem do comando do usuário para tentar apagar também
-  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
+  // Executa a varredura para apagar o histórico visual do chat
+  await limparChatCompleto(ctx);
   
-  await resetarSessao(ctx);
+  // Reseta os dados internos da roleta
+  resetarDados();
   
-  const msgSent = await ctx.reply('🔄 *Sessão reiniciada!* O histórico anterior foi apagado e o placar foi zerado para uma nova mesa.', { parse_mode: 'Markdown' });
-  mensagensParaApagar.push(msgSent.message_id);
+  // Envia a mensagem limpa de nova mesa
+  await ctx.reply('🔄 *Mesa Reiniciada com Sucesso!*\nTodo o histórico da mesa anterior foi apagado da tela.\n\n📊 Placar zerado. Pronto para os novos giros!', { parse_mode: 'Markdown' });
 });
 
 bot.on('text', async (ctx) => {
-  // Armazena a ID da mensagem que o usuário acabou de enviar
-  mensagensParaApagar.push(ctx.message.message_id);
-
   const texto = ctx.message.text.trim();
   const numero = parseInt(texto, 10);
 
   if (isNaN(numero) || numero < 0 || numero > 36 || texto !== numero.toString()) {
-    const msgErr = await ctx.reply('⚠️ Por favor, digite apenas um número válido entre 0 e 36.');
-    mensagensParaApagar.push(msgErr.message_id);
-    return;
+    return ctx.reply('⚠️ Por favor, digite apenas um número válido entre 0 e 36.');
   }
 
   let areaAtual = "";
@@ -111,9 +107,7 @@ bot.on('text', async (ctx) => {
 
   if (numero === 0) {
     areaAlvoPendente = null;
-    const msgZero = await ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
-    mensagensParaApagar.push(msgZero.message_id);
-    return;
+    return ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
   }
 
   let analiseDestaque = "";
@@ -126,7 +120,7 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant2 === ant1 && atual !== ant1) {
-      // SURFE RESPIRO 1: Aposta na área atual que acabou de entrar
+      // SURFE RESPIRO 1: Segue a força da nova área (atual)
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `🔥 *ALERTA DE SURFE (Respiro de 1 casa)!*\n` +
@@ -145,7 +139,7 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant3 === ant2 && ant1 !== ant2 && atual !== ant2) {
-      // SURFE RESPIRO 2: A área atual repetiu confirmando o fluxo
+      // SURFE RESPIRO 2: A nova área continuou repetindo
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `⚡ *ALERTA MÁXIMO DE SURFE (Respiro de 2 casas)!*\n` +
@@ -158,13 +152,11 @@ bot.on('text', async (ctx) => {
 
   let corEmoji = areaAtual === "ÁREA 1" ? "🔴" : "🔵";
   
-  const msgFinal = await ctx.reply(
+  ctx.reply(
     `${mensagemResultado}${analiseDestaque}${corEmoji} *REGISTRO: ${areaAtual}*\n` +
     `O número ${numero} foi catalogado na sua tabela de tendências.\n\n${stringPainel}`,
     { parse_mode: 'Markdown' }
   );
-  
-  mensagensParaApagar.push(msgFinal.message_id);
 });
 
 app.listen(PORT, async () => {
