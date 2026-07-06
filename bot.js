@@ -19,6 +19,7 @@ let numHistorico = [];
 let areaAlvoPendente = null; 
 let contagemGreens = 0;
 let contagemReds = 0;
+let mensagensParaApagar = []; // Guarda as IDs das mensagens da sessão
 
 app.get('/', (req, res) => {
   res.send('Projeto Mark II online e operando!');
@@ -29,32 +30,55 @@ app.post(WEBHOOK_PATH, (req, res) => {
   bot.handleUpdate(req.body, res);
 });
 
-// Função para resetar tudo
-function resetarSessao() {
+// Função para resetar tudo e tentar limpar o chat
+async function resetarSessao(ctx) {
   ultimasAreas = [];
   numHistorico = [];
   areaAlvoPendente = null;
   contagemGreens = 0;
   contagemReds = 0;
+
+  // Apaga as mensagens armazenadas na sessão anterior
+  if (ctx && mensagensParaApagar.length > 0) {
+    for (const msgId of mensagensParaApagar) {
+      try {
+        await ctx.deleteMessage(msgId);
+      } catch (err) {
+        // Ignora erros caso a mensagem já tenha sido apagada manualmente ou seja antiga
+      }
+    }
+  }
+  mensagensParaApagar = [];
 }
 
-bot.start((ctx) => {
-  resetarSessao();
-  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa (Estratégia Surfe).\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
+bot.start(async (ctx) => {
+  await resetarSessao(ctx);
+  const msgSent = await ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa.\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
+  mensagensParaApagar.push(msgSent.message_id);
 });
 
-// Comando extra para zerar sem precisar reiniciar o bot
-bot.command('zerar', (ctx) => {
-  resetarSessao();
-  ctx.reply('🔄 *Sessão reiniciada!* O histórico e o placar foram zerados para uma nova mesa.', { parse_mode: 'Markdown' });
+// Comando para zerar e limpar as mensagens anteriores automaticamente
+bot.command('zerar', async (ctx) => {
+  // Guarda a mensagem do comando do usuário para tentar apagar também
+  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
+  
+  await resetarSessao(ctx);
+  
+  const msgSent = await ctx.reply('🔄 *Sessão reiniciada!* O histórico anterior foi apagado e o placar foi zerado para uma nova mesa.', { parse_mode: 'Markdown' });
+  mensagensParaApagar.push(msgSent.message_id);
 });
 
 bot.on('text', async (ctx) => {
+  // Armazena a ID da mensagem que o usuário acabou de enviar
+  mensagensParaApagar.push(ctx.message.message_id);
+
   const texto = ctx.message.text.trim();
   const numero = parseInt(texto, 10);
 
   if (isNaN(numero) || numero < 0 || numero > 36 || texto !== numero.toString()) {
-    return ctx.reply('⚠️ Por favor, digite apenas um número válido entre 0 e 36.');
+    const msgErr = await ctx.reply('⚠️ Por favor, digite apenas um número válido entre 0 e 36.');
+    mensagensParaApagar.push(msgErr.message_id);
+    return;
   }
 
   let areaAtual = "";
@@ -87,12 +111,14 @@ bot.on('text', async (ctx) => {
 
   if (numero === 0) {
     areaAlvoPendente = null;
-    return ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
+    const msgZero = await ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
+    mensagensParaApagar.push(msgZero.message_id);
+    return;
   }
 
   let analiseDestaque = "";
 
-  // 2. LÓGICA DO ANALISADOR (ESTRATÉGIA SURFE) + INDICAÇÃO DE CAVALOS EXATOS
+  // 2. LÓGICA DO ANALISADOR (SURFE) + INDICAÇÃO DE CAVALOS EXATOS
   if (ultimasAreas.length >= 3) {
     const totalGiro = ultimasAreas.length;
     const ant2 = ultimasAreas[totalGiro - 3];
@@ -100,7 +126,7 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant2 === ant1 && atual !== ant1) {
-      // SURFE RESPIRO 1: Aposta a favor da área recém-chegada (atual)
+      // SURFE RESPIRO 1: Aposta na área atual que acabou de entrar
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `🔥 *ALERTA DE SURFE (Respiro de 1 casa)!*\n` +
@@ -119,7 +145,7 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant3 === ant2 && ant1 !== ant2 && atual !== ant2) {
-      // SURFE RESPIRO 2: A área que quebrou continuou repetindo (ant1 === atual)
+      // SURFE RESPIRO 2: A área atual repetiu confirmando o fluxo
       const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
       analiseDestaque = `⚡ *ALERTA MÁXIMO DE SURFE (Respiro de 2 casas)!*\n` +
@@ -132,11 +158,13 @@ bot.on('text', async (ctx) => {
 
   let corEmoji = areaAtual === "ÁREA 1" ? "🔴" : "🔵";
   
-  ctx.reply(
+  const msgFinal = await ctx.reply(
     `${mensagemResultado}${analiseDestaque}${corEmoji} *REGISTRO: ${areaAtual}*\n` +
     `O número ${numero} foi catalogado na sua tabela de tendências.\n\n${stringPainel}`,
     { parse_mode: 'Markdown' }
   );
+  
+  mensagensParaApagar.push(msgFinal.message_id);
 });
 
 app.listen(PORT, async () => {
