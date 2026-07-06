@@ -13,9 +13,12 @@ const textoTiers = "6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9";
 const AREA_1_VOISINS = textoVoisins.split(',').map(n => parseInt(n, 10));
 const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 
+// Variáveis de controle de tendência e PLACAR
 let ultimasAreas = []; 
 let numHistorico = []; 
-let areaAlvoPendente = null; // Nova variável para lembrar onde foi o sinal do tiro
+let areaAlvoPendente = null; 
+let contagemGreens = 0;
+let contagemReds = 0;
 
 app.get('/', (req, res) => {
   res.send('Projeto Mark II online e operando!');
@@ -26,11 +29,24 @@ app.post(WEBHOOK_PATH, (req, res) => {
   bot.handleUpdate(req.body, res);
 });
 
-bot.start((ctx) => {
+// Função para resetar tudo
+function resetarSessao() {
   ultimasAreas = [];
   numHistorico = [];
   areaAlvoPendente = null;
-  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Analisador com Validador de Green/Red ativo. Mande os números!', { parse_mode: 'Markdown' });
+  contagemGreens = 0;
+  contagemReds = 0;
+}
+
+bot.start((ctx) => {
+  resetarSessao();
+  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa.\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
+});
+
+// Comando extra para zerar sem precisar reiniciar o bot
+bot.command('zerar', (ctx) => {
+  resetarSessao();
+  ctx.reply('🔄 *Sessão reiniciada!* O histórico e o placar foram zerados para uma nova mesa.', { parse_mode: 'Markdown' });
 });
 
 bot.on('text', async (ctx) => {
@@ -45,15 +61,17 @@ bot.on('text', async (ctx) => {
   if (AREA_1_VOISINS.includes(numero)) areaAtual = "ÁREA 1";
   if (AREA_2_TIERS.includes(numero)) areaAtual = "ÁREA 2";
 
-  // 1. VERIFICAÇÃO DE GREEN OU RED AUTOMÁTICO
+  // 1. VERIFICAÇÃO DE GREEN OU RED + ATUALIZAÇÃO DO PLACAR
   let mensagemResultado = "";
   if (areaAlvoPendente !== null) {
     if (areaAtual === areaAlvoPendente) {
+      contagemGreens++;
       mensagemResultado = "🎉 *GREEN DETECTADO! Alvo atingido com sucesso!* 💰\n\n";
     } else if (numero !== 0) {
+      contagemReds++;
       mensagemResultado = "⚪ *Red na rodada.* A tendência não confirmou. Proteja sua banca!\n\n";
     }
-    areaAlvoPendente = null; // Limpa o alvo para a próxima análise
+    areaAlvoPendente = null; 
   }
 
   if (numero !== 0) {
@@ -63,16 +81,18 @@ bot.on('text', async (ctx) => {
 
   numHistorico.push(numero);
   if (numHistorico.length > 5) numHistorico.shift();
-  const stringHistorial = `⏱️ *Últimos Giros:* ${numHistorico.join(' ➔ ')}`;
+  
+  // Linha fixa com o Placar e os Últimos Giros
+  const stringPainel = `📊 *Placar:* ${contagemGreens} ✅ | ${contagemReds} ❌\n⏱️ *Últimos Giros:* ${numHistorico.join(' ➔ ')}`;
 
   if (numero === 0) {
     areaAlvoPendente = null;
-    return ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringHistorial}`, { parse_mode: 'Markdown' });
+    return ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero quebrou o ritmo do cilindro.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
   }
 
   let analiseDestaque = "";
 
-  // 2. LÓGICA DO ANALISADOR (Gera o sinal e define a areaAlvoPendente)
+  // 2. LÓGICA DO ANALISADOR + INDICAÇÃO DE CAVALOS EXATOS
   if (ultimasAreas.length >= 3) {
     const totalGiro = ultimasAreas.length;
     const ant2 = ultimasAreas[totalGiro - 3];
@@ -80,10 +100,13 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant2 === ant1 && atual !== ant1) {
+      const cavalosSugeridos = ant1 === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
+      
       analiseDestaque = `🔥 *ALERTA DE ENTRADA (Respiro de 1 casa)!*\n` +
                         `A ${ant1} repetiu 2 vezes e agora respirou na ${atual}.\n` +
-                        `🎯 *PRÓXIMA RODADA:* Forte tendência de retorno para a *${ant1}*!\n\n`;
-      areaAlvoPendente = ant1; // Salva qual área deve ganhar no próximo giro
+                        `🎯 *PRÓXIMA RODADA:* Retorno para a *${ant1}*!\n\n` +
+                        `💵 *Aposte nos Cavalos (Baixo Custo):*\n${cavalosSugeridos}\n\n`;
+      areaAlvoPendente = ant1; 
     }
   }
 
@@ -95,10 +118,13 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant3 === ant2 && ant1 !== ant2 && atual !== ant2) {
+      const cavalosSugeridos = ant2 === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
+      
       analiseDestaque = `⚡ *ALERTA MÁXIMO (Respiro de 2 casas)!*\n` +
                         `A ${ant2} repetiu 2 vezes e ficou presa fora por 2 rodadas.\n` +
-                        `🎯 *PRÓXIMA RODADA:* Hora do tiro! Tendência absurda de retorno para a *${ant2}*!\n\n`;
-      areaAlvoPendente = ant2; // Salva qual área deve ganhar no próximo giro
+                        `🎯 *PRÓXIMA RODADA:* Hora do tiro na *${ant2}*!\n\n` +
+                        `💵 *Aposte nos Cavalos (Baixo Custo):*\n${cavalosSugeridos}\n\n`;
+      areaAlvoPendente = ant2; 
     }
   }
 
@@ -106,7 +132,7 @@ bot.on('text', async (ctx) => {
   
   ctx.reply(
     `${mensagemResultado}${analiseDestaque}${corEmoji} *REGISTRO: ${areaAtual}*\n` +
-    `O número ${numero} foi catalogado na sua tabela de tendências.\n\n${stringHistorial}`,
+    `O número ${numero} foi catalogado na sua tabela de tendências.\n\n${stringPainel}`,
     { parse_mode: 'Markdown' }
   );
 });
