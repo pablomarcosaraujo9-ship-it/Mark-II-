@@ -13,7 +13,7 @@ const textoTiers = "6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9";
 const AREA_1_VOISINS = textoVoisins.split(',').map(n => parseInt(n, 10));
 const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 
-// Definição exata dos números dos cavalos sugeridos para validação do placar
+// Definição CORRIGIDA dos números dos cavalos sugeridos para validação do placar
 const CAVALOS_AREA_1 =;
 const CAVALOS_AREA_2 =;
 
