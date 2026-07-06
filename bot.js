@@ -40,7 +40,7 @@ function resetarSessao() {
 
 bot.start((ctx) => {
   resetarSessao();
-  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa.\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
+  ctx.reply('🤖 *Projeto Mark II Ativado!*\n\nModo Avançado Online:\n📊 Placar zerado e pronto!\n🎰 Cavalos configurados para banca baixa (Estratégia Surfe).\n\nMande os números da roleta!', { parse_mode: 'Markdown' });
 });
 
 // Comando extra para zerar sem precisar reiniciar o bot
@@ -92,7 +92,7 @@ bot.on('text', async (ctx) => {
 
   let analiseDestaque = "";
 
-  // 2. LÓGICA DO ANALISADOR + INDICAÇÃO DE CAVALOS EXATOS
+  // 2. LÓGICA DO ANALISADOR (ESTRATÉGIA SURFE) + INDICAÇÃO DE CAVALOS EXATOS
   if (ultimasAreas.length >= 3) {
     const totalGiro = ultimasAreas.length;
     const ant2 = ultimasAreas[totalGiro - 3];
@@ -100,13 +100,14 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant2 === ant1 && atual !== ant1) {
-      const cavalosSugeridos = ant1 === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
+      // SURFE RESPIRO 1: Aposta a favor da área recém-chegada (atual)
+      const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
-      analiseDestaque = `🔥 *ALERTA DE ENTRADA (Respiro de 1 casa)!*\n` +
-                        `A ${ant1} repetiu 2 vezes e agora respirou na ${atual}.\n` +
-                        `🎯 *PRÓXIMA RODADA:* Retorno para a *${ant1}*!\n\n` +
+      analiseDestaque = `🔥 *ALERTA DE SURFE (Respiro de 1 casa)!*\n` +
+                        `A ${ant1} quebrou. Nova tendência confirmada na ${atual}.\n` +
+                        `🎯 *PRÓXIMA RODADA:* Vamos surfar a sequência na *${atual}*!\n\n` +
                         `💵 *Aposte nos Cavalos (Baixo Custo):*\n${cavalosSugeridos}\n\n`;
-      areaAlvoPendente = ant1; 
+      areaAlvoPendente = atual; 
     }
   }
 
@@ -118,13 +119,14 @@ bot.on('text', async (ctx) => {
     const atual = ultimasAreas[totalGiro - 1];
 
     if (ant3 === ant2 && ant1 !== ant2 && atual !== ant2) {
-      const cavalosSugeridos = ant2 === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
+      // SURFE RESPIRO 2: A área que quebrou continuou repetindo (ant1 === atual)
+      const cavalosSugeridos = atual === "ÁREA 1" ? "• 8/9, 18/19 e 28/29" : "• 7/8 e 27/28";
       
-      analiseDestaque = `⚡ *ALERTA MÁXIMO (Respiro de 2 casas)!*\n` +
-                        `A ${ant2} repetiu 2 vezes e ficou presa fora por 2 rodadas.\n` +
-                        `🎯 *PRÓXIMA RODADA:* Hora do tiro na *${ant2}*!\n\n` +
+      analiseDestaque = `⚡ *ALERTA MÁXIMO DE SURFE (Respiro de 2 casas)!*\n` +
+                        `A força da antiga área sumiu e a ${atual} engatou fluxo de repetição.\n` +
+                        `🎯 *PRÓXIMA RODADA:* Hora de cravar no surfe da *${atual}*!\n\n` +
                         `💵 *Aposte nos Cavalos (Baixo Custo):*\n${cavalosSugeridos}\n\n`;
-      areaAlvoPendente = ant2; 
+      areaAlvoPendente = atual; 
     }
   }
 
