@@ -10,16 +10,21 @@ app.use(express.json());
 // Setores do Cilindro
 const textoVoisins = "22,18,29,7,28,12,35,3,26,32,15,19,4,21,2,25,17,34";
 const textoTiers = "6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9";
-const textoOrfaos = "1,20,14,31,9,17,34,6"; // Ajustado para intersecção padrão europeia
+const textoOrfaos = "1,20,14,31,9,17,34,6"; 
 
 const AREA_1_VOISINS = textoVoisins.split(',').map(n => parseInt(n, 10));
 const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 const AREA_3_ORFAOS = textoOrfaos.split(',').map(n => parseInt(n, 10));
 
+// Listas de validação criadas via array tradicional para os Órfãos (1, 6, 9, 14, 17, 20, 31, 34)
+const CAVALOS_AREA_1 = Array.of(8, 9, 18, 19, 28, 29);
+const CAVALOS_AREA_2 = Array.of(7, 8, 27, 28);
+const CAVALOS_AREA_3 = Array.of(1, 6, 9, 14, 17, 20, 31, 34);
+
 // Variáveis de controle de tendência e PLACAR
 let ultimasAreas = []; 
 let numHistorico = []; 
-let alvosPendentes = []; // Lista de números exatos que dão GREEN na rodada
+let alvosPendentes = []; 
 let contagemGreens = 0;
 let contagemReds = 0;
 
@@ -116,8 +121,19 @@ bot.on('text', async (ctx) => {
     const a1 = ultimasAreas[ultimasAreas.length - 1];
 
     if (a3 === a2 && a2 === a1 && a1 !== "OUTRA") {
-      let cavalos = a1 === "VIZINHOS DO ZERO" ? [8,9,18,19,28,29] : a1 === "TIERS DO CILINDRO" ? [7,8,27,28] :;
-      let textoCavalos = a1 === "VIZINHOS DO ZERO" ? "• 8/9, 18/19 e 28/29" : a1 === "TIERS DO CILINDRO" ? "• 7/8 e 27/28" : "• Plenas/Cavalos nos Órfãos";
+      let cavalos = [];
+      let textoCavalos = "";
+
+      if (a1 === "VIZINHOS DO ZERO") {
+        cavalos = CAVALOS_AREA_1;
+        textoCavalos = "• 8/9, 18/19 e 28/29";
+      } else if (a1 === "TIERS DO CILINDRO") {
+        cavalos = CAVALOS_AREA_2;
+        textoCavalos = "• 7/8 e 27/28";
+      } else {
+        cavalos = CAVALOS_AREA_3;
+        textoCavalos = "• Plenas/Cavalos nos Órfãos (1, 6, 9, 14, 17, 20, 31, 34)";
+      }
       
       analiseDestaque = `🔥 *ALERTA: SURFE DE SETOR!*\nO setor *${a1}* repetiu 3 vezes seguidas!\n🎯 *PRÓXIMA RODADA:* Continuar surfando a força desse setor.\n\n💵 *Sugestão de Entrada:* \n${textoCavalos}\n\n`;
       alvosPendentes = cavalos;
@@ -131,28 +147,31 @@ bot.on('text', async (ctx) => {
     if (n2 % 10 === n1 % 10) {
       const termo = n1 % 10;
       let numerosAlvo = [];
-      for (let i = termo; i <= 36; i += 10) numerosAlvo.push(i);
+      for (let i = termo; i <= 36; i += 10) {
+        numerosAlvo.push(i);
+      }
 
       analiseDestaque = `🎯 *ALERTA: TERMINAIS REPETIDOS!*\nO dígito final [${termo}] apareceu duas vezes seguidas (${n2} ➔ ${n1}).\n🎯 *PRÓXIMA RODADA:* Cercar o terminal final *${termo}*!\n\n💵 *Aposte nos Números:* Final ${termo} (${numerosAlvo.join(', ')})\n\n`;
       alvosPendentes = numerosAlvo;
     }
   }
 
-  // PADRÃO C: FINAIS CAVALO / SPLIT (Ex: Final 2 colado com Final 5)
+  // PADRÃO C: FINAIS CAVALO / SPLIT (Distância de 3 no tabuleiro)
   if (totalGiro >= 2 && analiseDestaque === "") {
     const n2 = numHistorico[totalGiro - 2] % 10;
     const n1 = numHistorico[totalGiro - 1] % 10;
     
-    // Mapeamento de vizinhos verticais clássicos do pano (Distância de 3 no tabuleiro)
     if (Math.abs(n2 - n1) === 3) {
       let menorFinal = Math.min(n2, n1);
       let alvosSplit = [];
       for (let i = menorFinal; i <= 36; i += 10) {
         alvosSplit.push(i);
-        if (i + 3 <= 36) alvosSplit.push(i + 3);
+        if (i + 3 <= 36) {
+          alvosSplit.push(i + 3);
+        }
       }
 
-      analiseDestaque = `⚡ *ALERTA: FINAIS CAVALO (SPLIT)!*\nQuebra sequencial em distância de rua detectada (${numHistorico[totalGiro-2]} ➔ ${numHistorico[totalGiro-1]}).\n🎯 *PRÓXIMA RODADA:* Entrada nos cavalos de final *${menorFinal}/${menorFinal+3}*.\n\n💵 *Cubra os Pares:* ${menorFinal}/${menorFinal+3} no tabuleiro.\n\n`;
+      analiseDestaque = `⚡ *ALERTA: FINAIS CAVALO (SPLIT)!*\nQuebra sequencial em distância de rua detectada (${numHistorico[totalGiro-2]} ➔ ${numHistorico[totalGiro-1]}).\n🎯 *PRÓXIMA RODADA:* Entrada nos cavalos de final *${menorFinal}/${menorFinal+3}*.\n\n💵 *Cubra os Pares:* Final ${menorFinal} e Final ${menorFinal+3} no tabuleiro.\n\n`;
       alvosPendentes = alvosSplit;
     }
   }
