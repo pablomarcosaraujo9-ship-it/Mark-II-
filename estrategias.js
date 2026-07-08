@@ -21,7 +21,6 @@ function processarEstrategias(numero, areaAtual) {
         return analise;
     }
 
-    // Alimenta os históricos internos da inteligência
     historicoGeralNumeros.push(numero);
     if (historicoGeralNumeros.length > 50) historicoGeralNumeros.shift();
 
@@ -30,12 +29,37 @@ function processarEstrategias(numero, areaAtual) {
         if (historicoGeralAreas.length > 50) historicoGeralAreas.shift();
     }
 
-    if (historicoGeralNumeros.length < 6) return analise;
+    if (historicoGeralNumeros.length < 10) return analise;
 
     let sinalDisparado = false;
 
-    // GATILHO A: SURFE DE SETOR (Detecta a força de repetição que você notou)
-    if (historicoGeralAreas.length >= 3) {
+    // GATILHO A: NOVO PADRÃO — TERMINAL DOMINANTE (Sua ideia cirúrgica!)
+    // Conta a frequência dos terminais nas últimas 15 rodadas
+    let amostragemRecente = historicoGeralNumeros.slice(-15);
+    let contagemTerminais = Array(10).fill(0);
+    
+    amostragemRecente.forEach(num => {
+        contagemTerminais[num % 10]++;
+    });
+
+    // Se o terminal atual bateu 4 ou mais vezes nas últimas 15 rodadas, ele é o dominante
+    if (contagemTerminais[terminalAtual] >= 4) {
+        let numerosAlvo = [];
+        for (let i = terminalAtual; i <= 36; i += 10) {
+            numerosAlvo.push(i);
+        }
+
+        analise.alerta = `🔥 *ALERTA: TERMINAL DOMINANTE DETECTADO!*\nO dígito final [${terminalAtual}] está ultra forte, batendo ${contagemTerminais[terminalAtual]} vezes recentemente!\n🎯 *PRÓXIMA RODADA:* Vamos surfar a força máxima do terminal *${terminalAtual}* no pano.\n\n💵 *Aposte nos Números:* ${numerosAlvo.join(', ')}\n`;
+        analise.alvos = numerosAlvo;
+        analise.tipo = "TERMINAL";
+
+        galeAtivo = true;
+        alvosGale = numerosAlvo;
+        sinalDisparado = true;
+    }
+
+    // GATILHO B: SURFE DE SETOR
+    if (!sinalDisparado && historicoGeralAreas.length >= 3) {
         const a3 = historicoGeralAreas[historicoGeralAreas.length - 3];
         const a2 = historicoGeralAreas[historicoGeralAreas.length - 2];
         const a1 = historicoGeralAreas[historicoGeralAreas.length - 1];
@@ -65,7 +89,7 @@ function processarEstrategias(numero, areaAtual) {
         }
     }
 
-    // GATILHO B: EXAUSTÃO ULTRA PRECISÃO DE TERMINAL (Só dispara se o surfe de setor não estiver dominando)
+    // GATILHO C: EXAUSTÃO ULTRA PRECISÃO DE TERMINAL (Se nenhum surfe/dominante estiver ativo)
     if (!sinalDisparado) {
         let ausencaDetectada = 0;
         for (let i = historicoGeralNumeros.length - 2; i >= 0; i--) {
@@ -76,7 +100,7 @@ function processarEstrategias(numero, areaAtual) {
             }
         }
 
-        if (ausencaDetectada >= 6) {
+        if (ausencaDetectada >= 7) {
             let numerosAlvo = [];
             for (let i = terminalAtual; i <= 36; i += 10) {
                 numerosAlvo.push(i);
