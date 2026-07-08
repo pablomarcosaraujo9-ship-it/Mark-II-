@@ -2,18 +2,20 @@
 
 let historicoGeralNumeros = [];
 let historicoGeralAreas = [];
+let galeAtivo = false;
+let alvosGale = [];
 
-// Definição estrita das Duplas de Terminais Gêmeos para máxima cobertura com poucas fichas
+// Definição estrita das Duplas de Terminais Gêmeos (Aposta seca no pano)
 const DUPLAS_GEMEOS = {
-    0:, // Terminais 0 e 8
+    0:,
     8:,
-    1:, // Terminais 1 e 9
+    1:,
     9:,
-    2:, // Terminais 2 e 6
+    2:,
     6:,
-    3:, // Terminais 3 e 7
+    3:,
     7:,
-    4:, // Terminais 4 e 5
+    4:,
     5: [4, 14, 24, 34, 5, 15, 25, 35]
 };
 
@@ -21,8 +23,20 @@ function processarEstrategias(numero, areaAtual) {
     let analise = { alerta: "", alvos: [], tipo: "" };
     const terminalAtual = numero % 10;
 
+    // 1. CHECAGEM DE MARTINGALE (GALE 1)
+    if (galeAtivo) {
+        galeAtivo = false;
+        if (alvosGale.includes(numero)) {
+            analise.resultadoGale = "GREEN_GALE";
+        } else {
+            analise.resultadoGale = "RED_GALE";
+        }
+        alvosGale = [];
+        return analise;
+    }
+
     historicoGeralNumeros.push(numero);
-    if (historicoGeralNumeros.length > 30) historicoGeralNumeros.shift(); // Reduzido de 50 para 30 (Alivia RAM no celular/Render)
+    if (historicoGeralNumeros.length > 30) historicoGeralNumeros.shift();
 
     if (areaAtual !== "OUTRA") {
         historicoGeralAreas.push(areaAtual);
@@ -59,12 +73,15 @@ function processarEstrategias(numero, areaAtual) {
                 analise.alerta = `🔥 *SURFE DE SETOR INICIAL!*\nO setor *${a1}* repetiu 3 vezes.\n🎯 *PRÓXIMA RODADA:* Seguir o fluxo na *${a1}*.\n\n💵 *Sugestão:* \n${textoCavalos}\n`;
                 analise.alvos = cavalos;
                 analise.tipo = "SETOR";
+                
+                galeAtivo = true;
+                alvosGale = cavalos;
                 sinalDisparado = true;
             }
         }
     }
 
-    // GATILHO B: CONFLUÊNCIA DE TERMINAIS GÊMEOS (MÁXIMA PRECISÃO / POUCAS FICHAS)
+    // GATILHO B: CONFLUÊNCIA DE TERMINAIS GÊMEOS (MÁXIMA PRECISÃO COM GALE 1)
     if (!sinalDisparado) {
         let ausencaDetectada = 0;
         for (let i = historicoGeralNumeros.length - 2; i >= 0; i--) {
@@ -75,17 +92,17 @@ function processarEstrategias(numero, areaAtual) {
             }
         }
 
-        // Alerta dispara após 6 rodadas de jejum do terminal
         if (ausencaDetectada >= 6) {
             const alvosFinais = DUPLAS_GEMEOS[terminalAtual] || [];
-            
-            // Encontra qual é o terminal parceiro na dupla para exibir na mensagem
             const todosTerminais = alvosFinais.map(n => n % 10);
             const terminalParceiro = todosTerminais.find(t => t !== terminalAtual);
 
-            analise.alerta = `🎯 *CONFLUÊNCIA DE TERMINAIS GÊMEOS!*\nO terminal [${terminalAtual}] quebrou jejum de ${ausencaDetectada} rodadas!\n🎯 *PRÓXIMA RODADA:* Entrada Sniper com poucas fichas no pano.\n\n💵 *Jogada Seca (Terminais ${terminalAtual} e ${terminalParceiro}):*\n👉 Números: ${alvosFinais.join(', ')}\n\n⚠️ *Aposta seca de ${alvosFinais.length} fichas. Sem Gale!*`;
+            analise.alerta = `🎯 *CONFLUÊNCIA DE TERMINAIS GÊMEOS!*\nO terminal [${terminalAtual}] quebrou jejum de ${ausencaDetectada} rodadas!\n🎯 *PRÓXIMA RODADA:* Entrada Sniper com poucas fichas no pano.\n\n💵 *Jogada (Terminais ${terminalAtual} e ${terminalParceiro}):*\n👉 Números: ${alvosFinais.join(', ')}\n\n⚠️ *Aposta tática de ${alvosFinais.length} fichas. Proteção de Gale 1 ativa!*`;
             analise.alvos = alvosFinais;
             analise.tipo = "TERMINAL";
+
+            galeAtivo = true;
+            alvosGale = alvosFinais;
         }
     }
 
@@ -95,6 +112,8 @@ function processarEstrategias(numero, areaAtual) {
 function resetarAusencias() {
     historicoGeralNumeros = [];
     historicoGeralAreas = [];
+    galeAtivo = false;
+    alvosGale = [];
 }
 
 module.exports = { processarEstrategias, resetarAusencias };
