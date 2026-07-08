@@ -5,18 +5,18 @@ let historicoGeralAreas = [];
 let galeAtivo = false;
 let alvosGale = [];
 
-// Definição estrita das Duplas de Terminais Gêmeos (Aposta seca no pano)
+// Arrays blindados via JSON para evitar remoção de dados pelo sistema
 const DUPLAS_GEMEOS = {
-    0:,
-    8:,
-    1:,
-    9:,
-    2:,
-    6:,
-    3:,
-    7:,
-    4:,
-    5: [4, 14, 24, 34, 5, 15, 25, 35]
+    0: JSON.parse("[0,10,20,30,8,18,28]"),
+    8: JSON.parse("[0,10,20,30,8,18,28]"),
+    1: JSON.parse("[1,11,21,31,9,19,29]"),
+    9: JSON.parse("[1,11,21,31,9,19,29]"),
+    2: JSON.parse("[2,12,22,32,6,16,26,36]"),
+    6: JSON.parse("[2,12,22,32,6,16,26,36]"),
+    3: JSON.parse("[3,13,23,33,7,17,27]"),
+    7: JSON.parse("[3,13,23,33,7,17,27]"),
+    4: JSON.parse("[4,14,24,34,5,15,25,35]"),
+    5: JSON.parse("[4,14,24,34,5,15,25,35]")
 };
 
 function processarEstrategias(numero, areaAtual) {
@@ -60,13 +60,13 @@ function processarEstrategias(numero, areaAtual) {
                 let textoCavalos = "";
 
                 if (a1 === "VIZINHOS DO ZERO") {
-                    cavalos =;
+                    cavalos = JSON.parse("[8,9,18,19,28,29]");
                     textoCavalos = "• 8/9, 18/19 e 28/29";
                 } else if (a1 === "TIERS DO CILINDRO") {
-                    cavalos =;
+                    cavalos = JSON.parse("[7,8,27,28]");
                     textoCavalos = "• 7/8 e 27/28";
                 } else {
-                    cavalos =;
+                    cavalos = JSON.parse("[1,6,9,14,17,20,31,34]");
                     textoCavalos = "• Cavalos nos Órfãos";
                 }
 
