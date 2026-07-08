@@ -1,6 +1,5 @@
 // Arquivo: estrategias.js
 
-// Guarda o histórico completo de giros para calcular médias reais
 let historicoGeralNumeros = [];
 let galeAtivo = false;
 let alvosGale = [];
@@ -21,14 +20,13 @@ function processarEstrategias(numero, areaAtual) {
         return analise;
     }
 
-    // Adiciona o número atual ao histórico geral da estratégia
     historicoGeralNumeros.push(numero);
     if (historicoGeralNumeros.length > 50) historicoGeralNumeros.shift();
 
-    if (historicoGeralNumeros.length < 6) return analise;
+    // Filtro de segurança: O bot precisa de pelo menos 10 números mapeados para entender o ritmo da mesa
+    if (historicoGeralNumeros.length < 10) return analise;
 
-    // 2. CÁLCULO DINÂMICO DE AUSÊNCIA
-    // Descobre quantas rodadas o terminal atual ficou sem aparecer antes deste giro
+    // 2. CÁLCULO DE EXAUSTÃO ULTRA-RESTRITA (MÍNIMO 7 RODADAS DE SUMIÇO)
     let ausencaDetectada = 0;
     for (let i = historicoGeralNumeros.length - 2; i >= 0; i--) {
         if (historicoGeralNumeros[i] % 10 !== terminalAtual) {
@@ -38,14 +36,15 @@ function processarEstrategias(numero, areaAtual) {
         }
     }
 
-    // O bot entende a imprevisibilidade: se o terminal ficou pelo menos 3 rodadas sumido e voltou
-    if (ausencaDetectada >= 3) {
+    // GATILHO FILTRADO: Só aciona se o sumiço foi extremo (7 rodadas ou mais)
+    // Isso evita pegar falsas voltas no meio do caminho
+    if (ausencaDetectada >= 7) {
         let numerosAlvo = [];
         for (let i = terminalAtual; i <= 36; i += 10) {
             numerosAlvo.push(i);
         }
 
-        analise.alerta = `🎯 *EXAUSTÃO INTELIGENTE (Terminal ${terminalAtual})*\nO dígito final apareceu após um sumiço real de ${ausencaDetectada} rodadas!\n🎯 *PRÓXIMA RODADA:* Resposta ao cansaço no terminal *${terminalAtual}*.\n\n💵 *Cavalos/Plenas:* ${numerosAlvo.join(', ')}\n`;
+        analise.alerta = `🎯 *EXAUSTÃO ULTRA PRECISÃO (Terminal ${terminalAtual})*\nO dígito final quebrou um jejum extremo de ${ausencaDetectada} rodadas sem aparecer!\n🎯 *PRÓXIMA RODADA:* Entrada de alta segurança no terminal *${terminalAtual}*.\n\n💵 *Cavalos/Plenas:* ${numerosAlvo.join(', ')}\n`;
         analise.alvos = numerosAlvo;
         analise.tipo = "TERMINAL";
 
