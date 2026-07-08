@@ -16,6 +16,7 @@ const AREA_2_TIERS = textoTiers.split(',').map(n => parseInt(n, 10));
 
 let numHistorico = []; 
 let alvosPendentes = []; 
+let noGale = false; // Controle local para saber se estamos na rodada de proteção
 let contagemGreens = 0;
 let contagemReds = 0;
 let redsSeguidos = 0; 
@@ -40,6 +41,7 @@ async function limparChatCompleto(ctx) {
 function resetarDados() {
   numHistorico = [];
   alvosPendentes = [];
+  noGale = false;
   contagemGreens = 0;
   contagemReds = 0;
   redsSeguidos = 0;
@@ -76,34 +78,36 @@ bot.on('text', async (ctx) => {
 
   let mensagemResultado = "";
 
-  // 1. VERIFICAÇÃO DO PLACAR DA RODADA ANTERIOR
+  // 1. CHECAGEM DO PLACAR (GERENCIAMENTO DE TENTATIVA 1 E GALE 1)
   if (alvosPendentes.length > 0) {
     if (alvosPendentes.includes(numero)) {
       contagemGreens++;
       redsSeguidos = 0;
-      mensagemResultado = "🎉 *GREEN CIRÚRGICO!* 💰\n\n";
+      if (noGale) {
+        mensagemResultado = "✅ *GREEN NO GALE 1!* Saldo protegido com sucesso! 💰\n\n";
+      } else {
+        mensagemResultado = "🎉 *GREEN CIRÚRGICO!* 💰\n\n";
+      }
       alvosPendentes = [];
+      noGale = false;
     } else {
-      mensagemResultado = "🔄 *Tentativa 1 Falhou. Protegendo no GALE 1...*\n\n";
+      if (!noGale) {
+        // Falhou a primeira tentativa, mantém os alvos e avisa que vai pro Gale 1
+        mensagemResultado = "🔄 *Tentativa 1 Falhou. Entrando com proteção de GALE 1 na sequência...*\n\n";
+        noGale = true;
+      } else {
+        // Falhou no Gale 1 também, computa o Red definitivo
+        contagemReds++;
+        redsSeguidos++;
+        mensagemResultado = "❌ *RED CONFIRMADO NO GALE.*\n\n";
+        alvosPendentes = [];
+        noGale = false;
+      }
     }
   }
 
-  // Envia para o motor processar a inteligência dinâmica
+  // Chame as estratégias APÓS verificar o placar anterior
   const resultadoTatico = estrategias.processarEstrategias(numero, areaAtual);
-
-  // 2. VERIFICAÇÃO DO RESULTADO DO GALE
-  if (resultadoTatico.resultadoGale) {
-    if (resultadoTatico.resultadoGale === "GREEN_GALE") {
-      contagemGreens++;
-      redsSeguidos = 0;
-      mensagemResultado = "✅ *GREEN NO GALE 1!* 💰\n\n";
-    } else {
-      contagemReds++;
-      redsSeguidos++;
-      mensagemResultado = "❌ *RED CONFIRMADO NO GALE.*\n\n";
-    }
-    alvosPendentes = []; 
-  }
 
   if (redsSeguidos >= 2) {
     modoAnaliseBloqueado = true;
@@ -115,8 +119,10 @@ bot.on('text', async (ctx) => {
   
   const stringPainel = `📊 *Placar:* ${contagemGreens} ✅ | ${contagemReds} ❌\n⏱️ *Últimos Giros:* ${numHistorico.join(' ➔ ')}`;
 
-  if (resultadoTatico.alerta) {
+  // Se a outra pasta gerou um sinal novo, carrega os alvos para a próxima rodada
+  if (resultadoTatico.alerta && alvosPendentes.length === 0) {
     alvosPendentes = resultadoTatico.alvos;
+    noGale = false; // Garante que começa na tentativa 1
   }
 
   ctx.reply(
