@@ -1,6 +1,6 @@
 const { Telegraf } = require('telegraf');
 const express = require('express');
-const estrategias = require('./estrategias'); // Puxa a nova pasta de regras
+const estrategias = require('./estrategias'); // Puxa o arquivo de regras
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const app = express();
@@ -89,22 +89,29 @@ bot.on('text', async (ctx) => {
 
   let mensagemResultado = "";
 
-  // Executa os cálculos matemáticos da outra pasta (estrategias.js)
-  const resultadoTatico = estrategias.processarEstrategias(numero, areaAtual, numHistorico, ultimasAreas);
-
   // 1. ANÁLISE DE PLACAR STANDARD (SINAIS NORMAIS)
-  if (alvosPendentes.length > 0 && !resultadoTatico.resultadoGale) {
+  if (alvosPendentes.length > 0) {
     if (alvosPendentes.includes(numero)) {
       contagemGreens++;
       redsSeguidos = 0;
       mensagemResultado = "🎉 *GREEN CIRÚRGICO ATINGIDO!* 💰\n\n";
       alvosPendentes = [];
     } else {
-      // Não dá Red imediato, avisa que vai para o Gale 1
       mensagemResultado = "🔄 *Rodada 1 Falhou.* Entrando com proteção de GALE 1 na sequência!\n\n";
-      alvosPendentes = [];
+      // Mantém os alvos abertos na memória para a próxima rodada (Gale 1)
     }
   }
+
+  // Atualização Antecipada do Histórico Local (Garante sincronia com o motor)
+  if (numero !== 0) {
+    ultimasAreas.push(areaAtual);
+    if (ultimasAreas.length > 6) ultimasAreas.shift();
+  }
+  numHistorico.push(numero);
+  if (numHistorico.length > 6) numHistorico.shift();
+
+  // Executa os cálculos matemáticos da outra pasta (estrategias.js)
+  const resultadoTatico = estrategias.processarEstrategias(numero, areaAtual, numHistorico, ultimasAreas);
 
   // 2. ANÁLISE DE PLACAR DE GALE (SINAIS DE SEGUNDA CHANCE)
   if (resultadoTatico.resultadoGale) {
@@ -117,6 +124,7 @@ bot.on('text', async (ctx) => {
       redsSeguidos++;
       mensagemResultado = "❌ *RED CONFIRMADO.* O Gale 1 não sustentou o retorno.\n\n";
     }
+    alvosPendentes = []; // Limpa de vez após o Gale rodar
   }
 
   // Verificação de Stop-Loss (2 Reds Seguidos)
@@ -124,14 +132,6 @@ bot.on('text', async (ctx) => {
     modoAnaliseBloqueado = true;
     return ctx.reply(`🚨 *STOP-LOSS ATIVADO!* 🚨\nBanca protegida. O robô congelou para análise.\n\n🔄 Digite /zerar quando o fluxo normalizar.`, { parse_mode: 'Markdown' });
   }
-
-  // Atualização do Histórico Local
-  if (numero !== 0) {
-    ultimasAreas.push(areaAtual);
-    if (ultimasAreas.length > 6) ultimasAreas.shift();
-  }
-  numHistorico.push(numero);
-  if (numHistorico.length > 6) numHistorico.shift();
   
   const stringPainel = `📊 *Placar:* ${contagemGreens} ✅ | ${contagemReds} ❌\n⏱️ *Últimos Giros:* ${numHistorico.join(' ➔ ')}`;
 
@@ -140,7 +140,7 @@ bot.on('text', async (ctx) => {
     return ctx.reply(`${mensagemResultado}🟢 *Número 0 (Coringa)*\nO zero resetou as análises.\n\n${stringPainel}`, { parse_mode: 'Markdown' });
   }
 
-  // Se a estratégia encontrou um sinal novo, armazena os alvos
+  // Se a estratégia encontrou um sinal novo na rodada atual
   let analiseDestaque = "";
   if (resultadoTatico.alerta) {
     analiseDestaque = resultadoTatico.alerta;
