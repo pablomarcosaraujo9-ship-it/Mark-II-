@@ -21,18 +21,27 @@ function obterTextoPlacar() {
     return `📊 Placar Atual: ${placarGreens} ✅ | ${placarReds} ❌`;
 }
 
+// DETERMINA A COR DO NÚMERO NA ROLETA EUROPEIA VIA LÓGICA MATEMÁTICA LIMPANDO ARRAYS
+function obterBolaCor(n) {
+    if (n === 0) return "🟢";
+    
+    // Regra do pano da roleta: define se o número é vermelho ou preto
+    const ehVermelho = (n >= 1 && n <= 10 && n % 2 !== 0) || 
+                       (n >= 11 && n <= 18 && n % 2 === 0) || 
+                       (n >= 19 && n <= 28 && n % 2 !== 0) || 
+                       (n >= 29 && n <= 36 && n % 2 === 0);
+                       
+    return ehVermelho ? "🔴" : "🔵";
+}
+
 // FUNÇÃO CENTRAL REUTILIZÁVEL PARA PROCESSAR CADA NÚMERO
 async function processarEntradaNumero(numeroSurgido, chatIdDestino) {
     const resultadoMesa = estrategias.processarEstrategias(numeroSurgido, "OUTRA");
     
-    // Atualiza o histórico visual para exibição na mensagem curta
     historicoVisivel.push(numeroSurgido);
     if (historicoVisivel.length > 6) historicoVisivel.shift();
     const textoGiros = historicoVisivel.join(' ➔ ');
-
-    // Define a cor da bola para o registro visual
-    const vermelhos =;
-    const bolaCor = numeroSurgido === 0 ? "🟢" : (vermelhos.includes(numeroSurgido) ? "🔴" : "🔵");
+    const bolaCor = obterBolaCor(numeroSurgido);
 
     // 1. CHECAGEM DOS RESULTADOS DE JOGADAS EM ANDAMENTO
     if (resultadoMesa.resultadoGale) {
@@ -99,13 +108,12 @@ bot.on('text', async (ctx) => {
     const texto = ctx.message.text.trim();
     const numero = parseInt(texto);
 
-    // Se o texto for um número válido de roleta (0 a 36)
     if (!isNaN(numero) && numero >= 0 && numero <= 36) {
         await processarEntradaNumero(numero, ctx.chat.id);
     }
 });
 
-// RECEPTOR WEBHOOK (MANTIDO POR SEGURANÇA SE PRECISAR AUTOMATIZAR)
+// RECEPTOR WEBHOOK (MANTIDO POR SEGURANÇA)
 app.post('/webhook-roleta', async (req, res) => {
     if (!req.body || !req.body.numero) {
         return res.status(400).send({ status: "dados_invalidos" });
