@@ -4,7 +4,7 @@ let historicoGeralNumeros = [];
 let galeAtivo = false;
 let alvosGale = [];
 
-// Definição estrita das Duplas de Terminais Gêmeos (Aposta seca no pano)
+// Arrays numéricos blindados contra remoção do sistema usando JSON.parse
 const DUPLAS_GEMEOS = {
     0: JSON.parse("[0,10,20,30,8,18,28]"),
     8: JSON.parse("[0,10,20,30,8,18,28]"),
@@ -22,7 +22,7 @@ function processarEstrategias(numero, areaAtual) {
     let analise = { alerta: "", alvos: [], tipo: "" };
     const terminalAtual = numero % 10;
 
-    // 1. CHECAGEM DE MARTINGALE (GALE 1)
+    // 1. CHECAGEM DO PLACAR DE GALE (MESA REAL OU FANTASMA)
     if (galeAtivo) {
         galeAtivo = false;
         if (alvosGale.includes(numero)) {
@@ -34,12 +34,13 @@ function processarEstrategias(numero, areaAtual) {
         return analise;
     }
 
+    // Gerenciamento estrito de memória para o celular e Render
     historicoGeralNumeros.push(numero);
-    if (historicoGeralNumeros.length > 25) historicoGeralNumeros.shift(); // Otimização extrema de RAM
+    if (historicoGeralNumeros.length > 25) historicoGeralNumeros.shift();
 
     if (historicoGeralNumeros.length < 5) return analise;
 
-    // GATILHO SNIPER: CONFLUÊNCIA DE TERMINAIS GÊMEOS
+    // 2. GATILHO SNIPER: CONTROLE DE JEJUM POR CONFLUÊNCIA DE TERMINAIS GÊMEOS
     let ausencaDetectada = 0;
     for (let i = historicoGeralNumeros.length - 2; i >= 0; i--) {
         if (historicoGeralNumeros[i] % 10 !== terminalAtual) {
@@ -49,13 +50,13 @@ function processarEstrategias(numero, areaAtual) {
         }
     }
 
-    // Dispara o sinal se o terminal que quebrou o jejum estava há 6 ou mais rodadas sem aparecer
+    // Dispara a entrada estratégica se o terminal que quebrou o jejum ficou 6 ou mais rodadas oculto
     if (ausencaDetectada >= 6) {
         const alvosFinais = DUPLAS_GEMEOS[terminalAtual] || [];
         const todosTerminais = alvosFinais.map(n => n % 10);
         const terminalParceiro = todosTerminais.find(t => t !== terminalAtual);
 
-        analise.alerta = `🎯 *CONFLUÊNCIA DE TERMINAIS GÊMEOS!*\nO terminal [${terminalAtual}] quebrou jejum de ${ausencaDetectada} rodadas!\n🎯 *PRÓXIMA RODADA:* Entrada Sniper com poucas fichas no pano.\n\n💵 *Jogada (Terminais ${terminalAtual} e ${terminalParceiro}):*\n👉 Números: ${alvosFinais.join(', ')}\n\n⚠️ *Aposta tática de ${alvosFinais.length} fichas. Proteção de Gale 1 ativa!*`;
+        analise.alerta = `🎯 *CONFLUÊNCIA DE TERMINAIS GÊMEOS!*\nO terminal [${terminalAtual}] quebrou um jejum de ${ausencaDetectada} rodadas!\n🎯 *PRÓXIMA RODADA:* Entrada Sniper com poucas fichas no pano.\n\n💵 *Jogada (Terminais ${terminalAtual} e ${terminalParceiro}):*\n👉 Números: ${alvosFinais.join(', ')}\n\n⚠️ *Aposta tática de ${alvosFinais.length} fichas. Proteção de Gale 1 ativa!*`;
         analise.alvos = alvosFinais;
         analise.tipo = "TERMINAL";
 
