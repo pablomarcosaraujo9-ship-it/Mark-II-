@@ -1,4 +1,4 @@
-// Arquivo: bot.js
+// Arquivo: bot.js — NOVA (Bot de Análise de Mercado)
 
 // CAPTURA DE ERROS PARA APARECER NO LOG DO RENDER
 process.on('uncaughtException', (err) => {
@@ -10,157 +10,79 @@ process.on('unhandledRejection', (reason) => {
 
 const express = require('express');
 const { Telegraf } = require('telegraf');
-const estrategias = require('./estrategias');
-const estatisticas = require('./estatisticas');
-const controleRisco = require('./controleRisco');
+const mercado = require('./mercado');
+const listaPadrao = require('./listaPadrao');
+const analise = require('./analise');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const CHAT_ID = process.env.CHAT_ID;
 const PORT = process.env.PORT || 3000;
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const app = express();
 app.use(express.json());
 
-let contadorRedsSeguidos = 0;
-let modoFantasmaAtivo = false;
-let placarGreens = 0;
-let placarReds = 0;
-let historicoVisivel = [];
+const estadoConversa = new Map();
 
-function obterTextoPlacar() {
-    return `📊 Placar Atual: ${placarGreens} ✅ | ${placarReds} ❌`;
-}
+bot.start((ctx) => ctx.reply(
+    "🚀 *NOVA Ativo!*\n\nSou seu bot de análise de mercado global (ações Brasil + EUA).\n\nDigite /investir para começar uma varredura.",
+    { parse_mode: 'Markdown' }
+));
 
-// DETERMINA A COR DO NÚMERO NA ROLETA EUROPEIA VIA LÓGICA MATEMÁTICA LIMPANDO ARRAYS
-function obterBolaCor(n) {
-    if (n === 0) return "🟢";
-    
-    // Regra do pano da roleta: define se o número é vermelho ou preto
-    const ehVermelho = (n >= 1 && n <= 10 && n % 2 !== 0) || 
-                       (n >= 11 && n <= 18 && n % 2 === 0) || 
-                       (n >= 19 && n <= 28 && n % 2 !== 0) || 
-                       (n >= 29 && n <= 36 && n % 2 === 0);
-                       
-    return ehVermelho ? "🔴" : "🔵";
-}
+bot.command('investir', async (ctx) => {
+    estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_valor' });
+    await ctx.reply(
+        "💰 Qual valor você pretende investir?\n\n(Digite apenas o número, ex: 100. Ou digite *pular* se não quiser informar.)",
+        { parse_mode: 'Markdown' }
+    );
+});
 
-// FUNÇÃO CENTRAL REUTILIZÁVEL PARA PROCESSAR CADA NÚMERO
-async function processarEntradaNumero(numeroSurgido, chatIdDestino) {
-    estatisticas.adicionarNovoGiro(numeroSurgido);
+bot.command('cancelar', async (ctx) => {
+    estadoConversa.delete(ctx.chat.id);
+    await ctx.reply("❌ Operação cancelada.");
+});
 
-    // TRAVA DE CONTROLE DE RISCO: bloqueia novas entradas durante o lockdown
-    if (controleRisco.estaEmLockdown()) {
-        const bolaCorLock = obterBolaCor(numeroSurgido);
-        historicoVisivel.push(numeroSurgido);
-        if (historicoVisivel.length > 6) historicoVisivel.shift();
-        await bot.telegram.sendMessage(
-            chatIdDestino,
-            `⏸️ *Pausa de proteção ativa* (${controleRisco.minutosRestantes()} min restantes).\n${bolaCorLock} Número ${numeroSurgido} apenas registrado, sem novas entradas.`,
+bot.on('text', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const texto = ctx.message.text.trim();
+    const estado = estadoConversa.get(chatId);
+
+    if (!estado) return;
+
+    if (estado.etapa === 'aguardando_valor') {
+        const valorInformado = texto.toLowerCase() === 'pular' ? null : texto;
+        estadoConversa.set(chatId, { etapa: 'aguardando_tickers_extra', valorInvestir: valorInformado });
+        await ctx.reply(
+            "📈 Quer adicionar algum ticker específico além da lista padrão?\n\n" +
+            "(Ex: *KO, NFLX, SAP.DE* — separados por vírgula. Ou digite *não* para usar só a lista padrão.)",
             { parse_mode: 'Markdown' }
         );
         return;
     }
 
-    const resultadoMesa = estrategias.processarEstrategias(numeroSurgido, "OUTRA");
-    
-    historicoVisivel.push(numeroSurgido);
-    if (historicoVisivel.length > 6) historicoVisivel.shift();
-    const textoGiros = historicoVisivel.join(' ➔ ');
-    const bolaCor = obterBolaCor(numeroSurgido);
+    if (estado.etapa === 'aguardando_tickers_extra') {
+        const tickersExtras = texto.toLowerCase() === 'não' || texto.toLowerCase() === 'nao'
+            ? []
+            : texto.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean);
 
-    // 1. CHECAGEM DOS RESULTADOS DE JOGADAS EM ANDAMENTO
-    if (resultadoMesa.resultadoGale) {
-        const statusRodada = resultadoMesa.resultadoGale;
+        const listaCompleta = [...listaPadrao.LISTA_PADRAO_COMPLETA, ...tickersExtras];
+        estadoConversa.delete(chatId);
 
-        if (!modoFantasmaAtivo) {
-            if (statusRodada === "GREEN_GALE") {
-                placarGreens++;
-                contadorRedsSeguidos = 0;
-                await bot.telegram.sendMessage(chatIdDestino, `✅ *GREEN NO GALE 1!* Saldo protegido com sucesso! 💰\n\n${obterTextoPlacar()}`, { parse_mode: 'Markdown' });
-            } else if (statusRodada === "RED_GALE") {
-                placarReds++;
-                contadorRedsSeguidos++;
-                controleRisco.ativarLockdown();
-                await bot.telegram.sendMessage(chatIdDestino, `❌ *RED confirmado no Gale.*\n\n${obterTextoPlacar()}\n\n⏸️ *Pausa de 15 minutos ativada.* Sem novas entradas até lá — variância de curto prazo não deve ser perseguida.`, { parse_mode: 'Markdown' });
+        const tempoEstimadoMin = Math.ceil((listaCompleta.length * 8) / 60);
+        await ctx.reply(
+            `🔍 *Varredura iniciada* — ${listaCompleta.length} ativos.\nTempo estimado: ~${tempoEstimadoMin} min (respeitando limite da API).\nAguarde...`,
+            { parse_mode: 'Markdown' }
+        );
 
-                if (contadorRedsSeguidos >= 2) {
-                    modoFantasmaAtivo = true;
-                    await bot.telegram.sendMessage(chatIdDestino, `⚠️ *STOP-LOSS ATIVADO (2 REDs)!*\nO bot entrou em modo de *Entrada Fantasma* de teste.\nO sistema analisará a mesa sem expor suas fichas.`, { parse_mode: 'Markdown' });
-                }
-            }
-        } else {
-            if (statusRodada === "GREEN_GALE") {
-                modoFantasmaAtivo = false;
-                contadorRedsSeguidos = 0;
-                await bot.telegram.sendMessage(chatIdDestino, `✅ *TESTE VIRTUAL DEU GREEN!*\nA estabilidade da mesa retornou.\n🔄 *Retornando às operações reais na próxima oportunidade.*`, { parse_mode: 'Markdown' });
-            } else if (statusRodada === "RED_GALE") {
-                await bot.telegram.sendMessage(chatIdDestino, `🚨 *TESTE FALHOU (RED FANTASMA)!*\nA roleta continua instável.\n⚠️ *RECOMENDADO TROCAR DE MESA IMEDIATAMENTE!*`, { parse_mode: 'Markdown' });
-            }
+        try {
+            const cotacoes = await mercado.buscarMultiplasCotacoes(listaCompleta);
+            const relatorio = analise.gerarRelatorioVarredura(cotacoes, estado.valorInvestir);
+            await ctx.reply(relatorio, { parse_mode: 'Markdown' });
+        } catch (e) {
+            console.error("Erro na varredura:", e.message);
+            await ctx.reply("⚠️ Ocorreu um erro durante a varredura. Tente novamente com /investir.");
         }
+        return;
     }
-
-    // 2. DISPARO DE NOVOS ALERTAS CAPTURADOS PELO MOTOR SNIPER
-    if (resultadoMesa.alerta) {
-        if (!modoFantasmaAtivo) {
-            await bot.telegram.sendMessage(chatIdDestino, resultadoMesa.alerta, { parse_mode: 'Markdown' });
-        } else {
-            console.log(`[Modo Fantasma] Testando parâmetros em silêncio para: ${resultadoMesa.alvos.join(', ')}`);
-        }
-    }
-
-    // 3. RETORNO CURTO DE CONFIRMAÇÃO DE CATÁLOGO (IGUAL AO PROJETO ANTIGO)
-    await bot.telegram.sendMessage(chatIdDestino, `${bolaCor} *REGISTRO*\nNúmero ${numeroSurgido} catalogado.\n\n${obterTextoPlacar()}\n⏱️ Últimos Giros: ${textoGiros}`, { parse_mode: 'Markdown' });
-}
-
-// COMANDOS DO TELEGRAM
-bot.command('zerar', async (ctx) => {
-    contadorRedsSeguidos = 0;
-    modoFantasmaAtivo = false;
-    placarGreens = 0;
-    placarReds = 0;
-    historicoVisivel = [];
-    estrategias.resetarAusencias();
-    controleRisco.resetarLockdown();
-    try {
-        await ctx.reply("🧹 *PROJETO MARK II REINICIADO!*\nSistemas e históricos zerados.", { parse_mode: 'Markdown' });
-    } catch (e) {
-        console.error("Erro /zerar:", e.message);
-    }
-});
-
-bot.command('stats', async (ctx) => {
-    try {
-        await ctx.reply(estatisticas.gerarPainelEstatistico(), { parse_mode: 'Markdown' });
-    } catch (e) {
-        console.error("Erro /stats:", e.message);
-    }
-});
-
-bot.start((ctx) => ctx.reply("🚀 Bot Mark II Ativo!\nDigite apenas o número que saiu na roleta para catalogar."));
-
-// ESCUTADOR DE TEXTO: Captura quando você digita apenas o número no chat
-bot.on('text', async (ctx) => {
-    const texto = ctx.message.text.trim();
-    const numero = parseInt(texto);
-
-    if (!isNaN(numero) && numero >= 0 && numero <= 36) {
-        await processarEntradaNumero(numero, ctx.chat.id);
-    }
-});
-
-// RECEPTOR WEBHOOK (MANTIDO POR SEGURANÇA)
-app.post('/webhook-roleta', async (req, res) => {
-    if (!req.body || !req.body.numero) {
-        return res.status(400).send({ status: "dados_invalidos" });
-    }
-    const numeroSurgido = parseInt(req.body.numero);
-    const destinoID = CHAT_ID || req.body.chat_id;
-    
-    if (destinoID) {
-        await processarEntradaNumero(numeroSurgido, destinoID);
-    }
-    res.status(200).send({ status: "processado" });
 });
 
 app.listen(PORT, () => {
