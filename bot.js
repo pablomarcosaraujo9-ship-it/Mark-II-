@@ -12,6 +12,7 @@ const express = require('express');
 const { Telegraf } = require('telegraf');
 const estrategias = require('./estrategias');
 const estatisticas = require('./estatisticas');
+const controleRisco = require('./controleRisco');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
@@ -47,6 +48,20 @@ function obterBolaCor(n) {
 // FUNÇÃO CENTRAL REUTILIZÁVEL PARA PROCESSAR CADA NÚMERO
 async function processarEntradaNumero(numeroSurgido, chatIdDestino) {
     estatisticas.adicionarNovoGiro(numeroSurgido);
+
+    // TRAVA DE CONTROLE DE RISCO: bloqueia novas entradas durante o lockdown
+    if (controleRisco.estaEmLockdown()) {
+        const bolaCorLock = obterBolaCor(numeroSurgido);
+        historicoVisivel.push(numeroSurgido);
+        if (historicoVisivel.length > 6) historicoVisivel.shift();
+        await bot.telegram.sendMessage(
+            chatIdDestino,
+            `⏸️ *Pausa de proteção ativa* (${controleRisco.minutosRestantes()} min restantes).\n${bolaCorLock} Número ${numeroSurgido} apenas registrado, sem novas entradas.`,
+            { parse_mode: 'Markdown' }
+        );
+        return;
+    }
+
     const resultadoMesa = estrategias.processarEstrategias(numeroSurgido, "OUTRA");
     
     historicoVisivel.push(numeroSurgido);
@@ -66,7 +81,8 @@ async function processarEntradaNumero(numeroSurgido, chatIdDestino) {
             } else if (statusRodada === "RED_GALE") {
                 placarReds++;
                 contadorRedsSeguidos++;
-                await bot.telegram.sendMessage(chatIdDestino, `❌ *RED CONFIRMADO NO GALE.*\n\n${obterTextoPlacar()}`, { parse_mode: 'Markdown' });
+                controleRisco.ativarLockdown();
+                await bot.telegram.sendMessage(chatIdDestino, `❌ *RED confirmado no Gale.*\n\n${obterTextoPlacar()}\n\n⏸️ *Pausa de 15 minutos ativada.* Sem novas entradas até lá — variância de curto prazo não deve ser perseguida.`, { parse_mode: 'Markdown' });
 
                 if (contadorRedsSeguidos >= 2) {
                     modoFantasmaAtivo = true;
@@ -105,6 +121,7 @@ bot.command('zerar', async (ctx) => {
     placarReds = 0;
     historicoVisivel = [];
     estrategias.resetarAusencias();
+    controleRisco.resetarLockdown();
     try {
         await ctx.reply("🧹 *PROJETO MARK II REINICIADO!*\nSistemas e históricos zerados.", { parse_mode: 'Markdown' });
     } catch (e) {
