@@ -13,6 +13,7 @@ const { Telegraf } = require('telegraf');
 const mercado = require('./mercado');
 const listaPadrao = require('./listaPadrao');
 const analise = require('./analise');
+const indices = require('./indices');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -67,13 +68,19 @@ bot.on('text', async (ctx) => {
         const listaCompleta = [...listaPadrao.LISTA_PADRAO_COMPLETA, ...tickersExtras];
         estadoConversa.delete(chatId);
 
-        const tempoEstimadoMin = Math.ceil((listaCompleta.length * 8) / 60);
+        const tempoEstimadoMin = Math.ceil(((listaCompleta.length + 4) * 8) / 60);
         await ctx.reply(
-            `🔍 *Varredura iniciada* — ${listaCompleta.length} ativos.\nTempo estimado: ~${tempoEstimadoMin} min (respeitando limite da API).\nAguarde...`,
+            `🔍 *Varredura iniciada* — ${listaCompleta.length} ativos + índices.\nTempo estimado: ~${tempoEstimadoMin} min (respeitando limite da API).\nAguarde...`,
             { parse_mode: 'Markdown' }
         );
 
         try {
+            // 1. Busca os índices gerais primeiro (termômetro do mercado)
+            const indicesResultado = await indices.buscarTodosIndices();
+            const textoIndices = indices.formatarIndices(indicesResultado);
+            await ctx.reply(textoIndices, { parse_mode: 'Markdown' });
+
+            // 2. Busca as cotações individuais e monta o relatório
             const cotacoes = await mercado.buscarMultiplasCotacoes(listaCompleta);
             const relatorio = analise.gerarRelatorioVarredura(cotacoes, estado.valorInvestir);
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
