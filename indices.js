@@ -12,6 +12,9 @@ const TWELVEDATA_API_KEY = process.env.TWELVEDATA_API_KEY;
 const BRAPI_BASE_URL = 'https://brapi.dev/api';
 const TWELVEDATA_BASE_URL = 'https://api.twelvedata.com';
 
+/**
+ * Busca o Ibovespa via Brapi.
+ */
 async function buscarIbovespa() {
     try {
         const url = `${BRAPI_BASE_URL}/quote/^BVSP?token=${BRAPI_TOKEN}`;
@@ -34,6 +37,9 @@ async function buscarIbovespa() {
     }
 }
 
+/**
+ * Busca um índice global (S&P 500 ou Nasdaq) via Twelve Data.
+ */
 async function buscarIndiceGlobal(simbolo, nomeExibicao) {
     try {
         const url = `${TWELVEDATA_BASE_URL}/quote?symbol=${encodeURIComponent(simbolo)}&apikey=${TWELVEDATA_API_KEY}`;
@@ -55,6 +61,9 @@ async function buscarIndiceGlobal(simbolo, nomeExibicao) {
     }
 }
 
+/**
+ * Busca a cotação do Dólar (USD/BRL) via Twelve Data.
+ */
 async function buscarDolar() {
     try {
         const url = `${TWELVEDATA_BASE_URL}/quote?symbol=USD/BRL&apikey=${TWELVEDATA_API_KEY}`;
@@ -76,16 +85,20 @@ async function buscarDolar() {
     }
 }
 
+/**
+ * Busca todos os índices de uma vez, espaçando as chamadas
+ * para respeitar limites de requisições por minuto.
+ */
 async function buscarTodosIndices() {
     const resultados = [];
 
     resultados.push(await buscarIbovespa());
     await new Promise((r) => setTimeout(r, 8000));
 
-    resultados.push(await buscarIndiceGlobal('SPX', 'S&P 500'));
+    resultados.push(await buscarIndiceGlobal('SPY', 'S&P 500 (via ETF SPY)'));
     await new Promise((r) => setTimeout(r, 8000));
 
-    resultados.push(await buscarIndiceGlobal('IXIC', 'Nasdaq'));
+    resultados.push(await buscarIndiceGlobal('QQQ', 'Nasdaq (via ETF QQQ)'));
     await new Promise((r) => setTimeout(r, 8000));
 
     resultados.push(await buscarDolar());
@@ -93,6 +106,9 @@ async function buscarTodosIndices() {
     return resultados;
 }
 
+/**
+ * Formata os índices em texto Markdown para o Telegram.
+ */
 function formatarIndices(indices) {
     let texto = `🌎 *ÍNDICES DE MERCADO*\n───────────────────────\n`;
 
