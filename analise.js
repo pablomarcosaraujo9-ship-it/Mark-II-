@@ -13,6 +13,25 @@
 const LIMITE_QUEDA_RELEVANTE = -3; // % — queda a partir daqui é destacada
 const LIMITE_ALTA_RELEVANTE = 3;   // % — alta a partir daqui é destacada
 
+const LIMITE_MOVIMENTO_FORTE = 5;    // % (em módulo) — acima disso, "forte"
+const LIMITE_MOVIMENTO_MODERADO = 3; // % (em módulo) — acima disso, "moderado"
+
+/**
+ * Classifica a intensidade de um movimento com base na variação %.
+ * Retorna um rótulo textual + emoji, sem fazer previsão nenhuma —
+ * só descreve o tamanho do movimento já ocorrido.
+ */
+function classificarIntensidade(variacaoPercentual) {
+    const abs = Math.abs(variacaoPercentual);
+    if (abs >= LIMITE_MOVIMENTO_FORTE) {
+        return '🔥 Movimento forte (acima da média do dia)';
+    }
+    if (abs >= LIMITE_MOVIMENTO_MODERADO) {
+        return '⚡ Movimento moderado';
+    }
+    return '➖ Movimento discreto';
+}
+
 function classificarCotacoes(cotacoes) {
     const validas = cotacoes.filter((c) => c.sucesso);
     const comErro = cotacoes.filter((c) => !c.sucesso);
@@ -32,6 +51,50 @@ function classificarCotacoes(cotacoes) {
     return { quedas, altas, estaveis, comErro };
 }
 
+/**
+ * Formata uma linha individual de ativo, com nota de oportunidade
+ * (intensidade do movimento) junto do preço e variação.
+ */
+function formatarLinhaAtivo(cotacao) {
+    const sinal = cotacao.variacaoPercentual >= 0 ? '+' : '';
+    const emoji = cotacao.variacaoPercentual >= 0 ? '📈' : '📉';
+    const intensidade = classificarIntensidade(cotacao.variacaoPercentual);
+
+    return (
+        `${emoji} \`${cotacao.ticker}\` ${cotacao.nome || ''}\n` +
+        `   ${sinal}${cotacao.variacaoPercentual.toFixed(2)}% — ${cotacao.moeda} ${cotacao.precoAtual.toFixed(2)}\n` +
+        `   ${intensidade}`
+    );
+}
+
+/**
+ * Gera o ranking em medalhas (top 3) das maiores quedas e altas.
+ */
+function formatarRanking(quedas, altas) {
+    const medalhas = ['🥇', '🥈', '🥉'];
+    let texto = '';
+
+    if (quedas.length > 0) {
+        texto += `\n🏆 *RANKING — Maiores Quedas do Dia*\n`;
+        quedas.slice(0, 3).forEach((c, i) => {
+            texto += `${medalhas[i]} \`${c.ticker}\` ${c.variacaoPercentual.toFixed(2)}%\n`;
+        });
+    }
+
+    if (altas.length > 0) {
+        texto += `\n🏆 *RANKING — Maiores Altas do Dia*\n`;
+        altas.slice(0, 3).forEach((c, i) => {
+            texto += `${medalhas[i]} \`${c.ticker}\` +${c.variacaoPercentual.toFixed(2)}%\n`;
+        });
+    }
+
+    return texto;
+}
+
+/**
+ * Gera o texto formatado em Markdown para o Telegram com o
+ * resumo da varredura, usando linguagem factual (não preditiva).
+ */
 function gerarRelatorioVarredura(cotacoes, valorInvestir) {
     const { quedas, altas, estaveis, comErro } = classificarCotacoes(cotacoes);
 
@@ -43,23 +106,24 @@ function gerarRelatorioVarredura(cotacoes, valorInvestir) {
     texto += `Ativos analisados: *${cotacoes.length}*\n\n`;
 
     if (quedas.length > 0) {
-        texto += `🔻 *Quedas relevantes (≥ ${Math.abs(LIMITE_QUEDA_RELEVANTE)}%):*\n`;
+        texto += `🔻 *Quedas relevantes (≥ ${Math.abs(LIMITE_QUEDA_RELEVANTE)}%):*\n\n`;
         quedas.forEach((c) => {
-            texto += `• \`${c.ticker}\` ${c.nome || ''} — ${c.variacaoPercentual.toFixed(2)}% (${c.moeda} ${c.precoAtual.toFixed(2)})\n`;
+            texto += formatarLinhaAtivo(c) + '\n\n';
         });
-        texto += `\n`;
     }
 
     if (altas.length > 0) {
-        texto += `🔺 *Altas relevantes (≥ ${LIMITE_ALTA_RELEVANTE}%):*\n`;
+        texto += `🔺 *Altas relevantes (≥ ${LIMITE_ALTA_RELEVANTE}%):*\n\n`;
         altas.forEach((c) => {
-            texto += `• \`${c.ticker}\` ${c.nome || ''} — +${c.variacaoPercentual.toFixed(2)}% (${c.moeda} ${c.precoAtual.toFixed(2)})\n`;
+            texto += formatarLinhaAtivo(c) + '\n\n';
         });
-        texto += `\n`;
     }
 
     if (quedas.length === 0 && altas.length === 0) {
         texto += `📎 Nenhum ativo com variação relevante hoje. ${estaveis.length} ativos com movimento dentro da faixa normal.\n\n`;
+    } else {
+        texto += formatarRanking(quedas, altas);
+        texto += '\n';
     }
 
     if (comErro.length > 0) {
@@ -75,6 +139,7 @@ function gerarRelatorioVarredura(cotacoes, valorInvestir) {
 
 module.exports = {
     classificarCotacoes,
+    classificarIntensidade,
     gerarRelatorioVarredura,
     LIMITE_QUEDA_RELEVANTE,
     LIMITE_ALTA_RELEVANTE,
