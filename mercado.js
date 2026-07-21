@@ -1,22 +1,62 @@
 /**
  * MÓDULO DE MERCADO — NOVA
  * ==========================
- * Conecta com a API da Twelve Data para buscar cotações de ações
- * globais (Brasil, EUA, e outros mercados suportados).
+ * Conecta com DUAS fontes de dados, escolhendo automaticamente
+ * a fonte certa conforme o ticker:
  *
- * Documentação: https://twelvedata.com/docs
+ * - Tickers terminados em ".SA" (ex: "PETR4.SA") → Brapi (Brasil/B3)
+ * - Qualquer outro ticker (ex: "AAPL", "SAP.DE") → Twelve Data (Global)
+ *
+ * Documentação:
+ * Brapi: https://brapi.dev/docs
+ * Twelve Data: https://twelvedata.com/docs
  */
 
+const BRAPI_TOKEN = process.env.BRAPI_TOKEN;
 const TWELVEDATA_API_KEY = process.env.TWELVEDATA_API_KEY;
-const BASE_URL = 'https://api.twelvedata.com';
+
+const BRAPI_BASE_URL = 'https://brapi.dev/api';
+const TWELVEDATA_BASE_URL = 'https://api.twelvedata.com';
 
 /**
- * Busca a cotação atual (preço, variação %, volume) de um ticker.
- * Exemplos de ticker: "PETR4.SA" (Brasil), "AAPL" (EUA), "SAP.DE" (Alemanha)
+ * Busca cotação de um ticker brasileiro via Brapi.
+ * Recebe o ticker JÁ SEM o sufixo ".SA" (ex: "PETR4").
  */
-async function buscarCotacao(ticker) {
+async function buscarCotacaoBrasil(tickerSemSufixo) {
     try {
-        const url = `${BASE_URL}/quote?symbol=${encodeURIComponent(ticker)}&apikey=${TWELVEDATA_API_KEY}`;
+        const url = `${BRAPI_BASE_URL}/quote/${encodeURIComponent(tickerSemSufixo)}?token=${BRAPI_TOKEN}`;
+        const resposta = await fetch(url);
+        const dados = await resposta.json();
+
+        if (!dados.results || dados.results.length === 0) {
+            const mensagemErro = dados.message || 'Ticker não encontrado';
+            return { sucesso: false, ticker: `${tickerSemSufixo}.SA`, erro: mensagemErro };
+        }
+
+        const resultado = dados.results[0];
+
+        return {
+            sucesso: true,
+            ticker: `${resultado.symbol}.SA`,
+            nome: resultado.longName || resultado.shortName,
+            precoAtual: resultado.regularMarketPrice,
+            variacaoPercentual: resultado.regularMarketChangePercent,
+            variacaoAbsoluta: resultado.regularMarketChange,
+            volume: resultado.regularMarketVolume || null,
+            moeda: resultado.currency || 'BRL',
+            mercado: 'B3',
+        };
+    } catch (erro) {
+        return { sucesso: false, ticker: `${tickerSemSufixo}.SA`, erro: erro.message };
+    }
+}
+
+/**
+ * Busca cotação de um ticker global (não-brasileiro) via Twelve Data.
+ */
+async function buscarCotacaoGlobal(ticker) {
+    try {
+        const url = `${TWELVEDATA_BASE_URL}/quote?symbol=${encodeURIComponent(ticker)}&apikey=${TWELVEDATA_API_KEY}`;
         const resposta = await fetch(url);
         const dados = await resposta.json();
 
@@ -41,19 +81,29 @@ async function buscarCotacao(ticker) {
 }
 
 /**
- * Busca cotações de múltiplos tickers, respeitando o limite de
- * 8 requisições por minuto do plano gratuito da Twelve Data.
- * Espaça as chamadas em ~8 segundos cada para ficar dentro do limite.
+ * Ponto de entrada único: decide automaticamente qual fonte usar
+ * com base no formato do ticker.
+ */
+async function buscarCotacao(ticker) {
+    if (ticker.toUpperCase().endsWith('.SA')) {
+        const tickerSemSufixo = ticker.slice(0, -3); // remove ".SA"
+        return buscarCotacaoBrasil(tickerSemSufixo);
+    }
+    return buscarCotacaoGlobal(ticker);
+}
+
+/**
+ * Busca cotações de múltiplos tickers, espaçando as chamadas para
+ * respeitar limites de requisições por minuto de ambas as APIs.
  */
 async function buscarMultiplasCotacoes(tickers) {
     const resultados = [];
-    const INTERVALO_MS = 8000; // ~8s entre chamadas = até 7-8 por minuto
+    const INTERVALO_MS = 8000; // ~8s entre chamadas
 
     for (let i = 0; i < tickers.length; i++) {
         const cotacao = await buscarCotacao(tickers[i]);
         resultados.push(cotacao);
 
-        // Não espera depois da última chamada
         if (i < tickers.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
         }
