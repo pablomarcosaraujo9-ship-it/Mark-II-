@@ -15,6 +15,7 @@ const listaPadrao = require('./listaPadrao');
 const analise = require('./analise');
 const indices = require('./indices');
 const grafico = require('./grafico');
+const longoPrazo = require('./longoPrazo');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -94,6 +95,20 @@ bot.on('text', async (ctx) => {
             const cotacoes = await mercado.buscarMultiplasCotacoes(listaCompleta);
             const relatorio = analise.gerarRelatorioVarredura(cotacoes, estado.valorInvestir);
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
+
+            // Contexto de longo prazo apenas para os tops do ranking (economiza API)
+            const { quedas, altas } = analise.classificarCotacoes(cotacoes);
+            const tickersParaContexto = [
+                ...quedas.slice(0, 3).map((c) => c.ticker),
+                ...altas.slice(0, 3).map((c) => c.ticker),
+            ];
+
+            if (tickersParaContexto.length > 0) {
+                await ctx.reply(`📅 Buscando contexto de 12 meses para os destaques do dia...`);
+                const contextos = await longoPrazo.buscarContextoLongoPrazo(tickersParaContexto);
+                const textoContexto = longoPrazo.formatarContextoLongoPrazo(contextos);
+                await ctx.reply(textoContexto, { parse_mode: 'Markdown' });
+            }
         } catch (e) {
             console.error("Erro na varredura:", e.message);
             await ctx.reply("⚠️ Ocorreu um erro durante a varredura. Tente novamente com /investir.");
