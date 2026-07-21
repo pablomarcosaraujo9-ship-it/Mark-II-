@@ -13,8 +13,8 @@
 const LIMITE_QUEDA_RELEVANTE = -1.5; // % — queda a partir daqui é destacada
 const LIMITE_ALTA_RELEVANTE = 1.5;   // % — alta a partir daqui é destacada
 
-const LIMITE_MOVIMENTO_FORTE = 5;    // % (em módulo) — acima disso, "forte"
-const LIMITE_MOVIMENTO_MODERADO = 3; // % (em módulo) — acima disso, "moderado"
+const LIMITE_MOVIMENTO_FORTE = 4;    // % (em módulo) — acima disso, "forte"
+const LIMITE_MOVIMENTO_MODERADO = 2; // % (em módulo) — acima disso, "moderado"
 
 /**
  * Classifica a intensidade de um movimento com base na variação %.
