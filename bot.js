@@ -14,6 +14,7 @@ const mercado = require('./mercado');
 const listaPadrao = require('./listaPadrao');
 const analise = require('./analise');
 const indices = require('./indices');
+const grafico = require('./grafico');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -25,7 +26,10 @@ app.use(express.json());
 const estadoConversa = new Map();
 
 bot.start((ctx) => ctx.reply(
-    "🚀 *NOVA Ativo!*\n\nSou seu bot de análise de mercado global (ações Brasil + EUA).\n\nDigite /investir para começar uma varredura.",
+    "🚀 *NOVA Ativo!*\n\nSou seu bot de análise de mercado global (ações Brasil + EUA).\n\n" +
+    "Comandos disponíveis:\n" +
+    "/investir — varredura completa de mercado\n" +
+    "/grafico — gráfico dos últimos 30 dias de um ativo",
     { parse_mode: 'Markdown' }
 ));
 
@@ -33,6 +37,14 @@ bot.command('investir', async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_valor' });
     await ctx.reply(
         "💰 Qual valor você pretende investir?\n\n(Digite apenas o número, ex: 100. Ou digite *pular* se não quiser informar.)",
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('grafico', async (ctx) => {
+    estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_grafico' });
+    await ctx.reply(
+        "📈 Qual ativo você quer ver no gráfico?\n\n(Ex: *PETR4.SA*, *AAPL*, *VALE3.SA*)",
         { parse_mode: 'Markdown' }
     );
 });
@@ -75,18 +87,42 @@ bot.on('text', async (ctx) => {
         );
 
         try {
-            // 1. Busca os índices gerais primeiro (termômetro do mercado)
             const indicesResultado = await indices.buscarTodosIndices();
             const textoIndices = indices.formatarIndices(indicesResultado);
             await ctx.reply(textoIndices, { parse_mode: 'Markdown' });
 
-            // 2. Busca as cotações individuais e monta o relatório
             const cotacoes = await mercado.buscarMultiplasCotacoes(listaCompleta);
             const relatorio = analise.gerarRelatorioVarredura(cotacoes, estado.valorInvestir);
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
         } catch (e) {
             console.error("Erro na varredura:", e.message);
             await ctx.reply("⚠️ Ocorreu um erro durante a varredura. Tente novamente com /investir.");
+        }
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_ticker_grafico') {
+        const ticker = texto.toUpperCase();
+        estadoConversa.delete(chatId);
+
+        await ctx.reply(`🔍 Buscando histórico de *${ticker}*...`, { parse_mode: 'Markdown' });
+
+        try {
+            const historico = await grafico.buscarHistorico(ticker);
+
+            if (!historico.sucesso) {
+                await ctx.reply(`⚠️ Não foi possível obter o histórico de ${ticker}: ${historico.erro}`);
+                return;
+            }
+
+            const urlGrafico = grafico.gerarUrlGrafico(ticker, historico.datas, historico.precos);
+            await ctx.replyWithPhoto(urlGrafico, {
+                caption: `📈 *${ticker}* — Últimos 30 dias\n\n⚠️ Movimento histórico, sem previsão de comportamento futuro.`,
+                parse_mode: 'Markdown',
+            });
+        } catch (e) {
+            console.error("Erro no gráfico:", e.message);
+            await ctx.reply("⚠️ Ocorreu um erro ao gerar o gráfico. Tente novamente com /grafico.");
         }
         return;
     }
