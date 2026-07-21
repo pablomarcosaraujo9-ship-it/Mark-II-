@@ -10,8 +10,8 @@
  * Isto não constitui recomendação de investimento.
  */
 
-const LIMITE_QUEDA_RELEVANTE = -3; // % — queda a partir daqui é destacada
-const LIMITE_ALTA_RELEVANTE = 3;   // % — alta a partir daqui é destacada
+const LIMITE_QUEDA_RELEVANTE = -1.5; // % — queda a partir daqui é destacada
+const LIMITE_ALTA_RELEVANTE = 1.5;   // % — alta a partir daqui é destacada
 
 const LIMITE_MOVIMENTO_FORTE = 5;    // % (em módulo) — acima disso, "forte"
 const LIMITE_MOVIMENTO_MODERADO = 3; // % (em módulo) — acima disso, "moderado"
