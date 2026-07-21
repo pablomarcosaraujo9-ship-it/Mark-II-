@@ -137,10 +137,41 @@ function gerarRelatorioVarredura(cotacoes, valorInvestir) {
     return texto;
 }
 
+/**
+ * Gera relatório dos ativos cujo preço unitário está dentro do
+ * valor informado pelo usuário — informação factual (preço atual),
+ * não recomendação. BRL e USD são tratados separadamente, sem
+ * conversão automática entre moedas.
+ */
+function gerarRelatorioOrcamento(cotacoes, valorInvestir) {
+    const validas = cotacoes.filter((c) => c.sucesso);
+    const acessiveis = validas
+        .filter((c) => c.precoAtual <= valorInvestir)
+        .sort((a, b) => b.precoAtual - a.precoAtual); // do mais caro (ainda acessível) ao mais barato
+
+    let texto = `💵 *ATIVOS DENTRO DO SEU ORÇAMENTO*\n───────────────────────\n`;
+    texto += `Valor informado: *${valorInvestir}* (tratado separadamente em R$ para ativos do Brasil e US$ para ativos dos EUA)\n\n`;
+
+    if (acessiveis.length === 0) {
+        texto += `Nenhum ativo da lista custa até esse valor por ação hoje.\n\n`;
+    } else {
+        acessiveis.forEach((c) => {
+            texto += `• \`${c.ticker}\` ${c.nome || ''} — ${c.moeda} ${c.precoAtual.toFixed(2)}\n`;
+        });
+        texto += `\n`;
+    }
+
+    texto += `⚠️ *Nota:* Isto mostra apenas o preço atual por ação (1 unidade). ` +
+        `Não é recomendação — avalie fundamentos antes de decidir.`;
+
+    return texto;
+}
+
 module.exports = {
     classificarCotacoes,
     classificarIntensidade,
     gerarRelatorioVarredura,
+    gerarRelatorioOrcamento,
     LIMITE_QUEDA_RELEVANTE,
     LIMITE_ALTA_RELEVANTE,
 };
