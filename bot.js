@@ -116,8 +116,11 @@ bot.on('text', async (ctx) => {
             }
 
             const urlGrafico = grafico.gerarUrlGrafico(ticker, historico.datas, historico.precos);
+            const urlYahoo = grafico.gerarUrlYahooFinance(ticker);
             await ctx.replyWithPhoto(urlGrafico, {
-                caption: `📈 *${ticker}* — Últimos 30 dias\n\n⚠️ Movimento histórico, sem previsão de comportamento futuro.`,
+                caption: `📈 *${ticker}* — Últimos 30 dias\n\n` +
+                    `🔗 [Ver gráfico interativo no Yahoo Finance](${urlYahoo})\n\n` +
+                    `⚠️ Movimento histórico, sem previsão de comportamento futuro.`,
                 parse_mode: 'Markdown',
             });
         } catch (e) {
