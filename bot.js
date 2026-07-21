@@ -44,7 +44,7 @@ bot.command('investir', async (ctx) => {
 bot.command('grafico', async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_grafico' });
     await ctx.reply(
-        "📈 Qual ativo você quer ver no gráfico?\n\n(Ex: *PETR4.SA*, *AAPL*, *VALE3.SA*)",
+        "📈 Qual ativo você quer ver no gráfico?\n\n(Ex: `PETR4.SA`, `AAPL`, `VALE3.SA`)",
         { parse_mode: 'Markdown' }
     );
 });
@@ -66,7 +66,7 @@ bot.on('text', async (ctx) => {
         estadoConversa.set(chatId, { etapa: 'aguardando_tickers_extra', valorInvestir: valorInformado });
         await ctx.reply(
             "📈 Quer adicionar algum ticker específico além da lista padrão?\n\n" +
-            "(Ex: *KO, NFLX, SAP.DE* — separados por vírgula. Ou digite *não* para usar só a lista padrão.)",
+            "(Ex: `KO, NFLX, SAP.DE` — separados por vírgula. Ou digite *não* para usar só a lista padrão.)",
             { parse_mode: 'Markdown' }
         );
         return;
