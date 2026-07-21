@@ -73,6 +73,14 @@ async function buscarHistorico(ticker) {
 }
 
 /**
+ * Monta a URL do Yahoo Finance para o ticker, para consulta
+ * interativa (zoom, períodos diferentes) fora do Telegram.
+ */
+function gerarUrlYahooFinance(ticker) {
+    return `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}/`;
+}
+
+/**
  * Monta a URL do QuickChart a partir do histórico de datas/preços.
  */
 function gerarUrlGrafico(ticker, datas, precos) {
@@ -105,4 +113,5 @@ function gerarUrlGrafico(ticker, datas, precos) {
 module.exports = {
     buscarHistorico,
     gerarUrlGrafico,
+    gerarUrlYahooFinance,
 };
