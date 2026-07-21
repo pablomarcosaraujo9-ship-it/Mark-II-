@@ -63,24 +63,10 @@ bot.on('text', async (ctx) => {
     if (!estado) return;
 
     if (estado.etapa === 'aguardando_valor') {
-        const valorInformado = texto.toLowerCase() === 'pular' ? null : texto;
-        estadoConversa.set(chatId, { etapa: 'aguardando_tickers_extra', valorInvestir: valorInformado });
-        await ctx.reply(
-            "📈 Quer adicionar algum ticker específico além da lista padrão?\n\n" +
-            "(Ex: `KO, NFLX, SAP.DE` — separados por vírgula. Ou digite *não* para usar só a lista padrão.)",
-            { parse_mode: 'Markdown' }
-        );
-        return;
-    }
-
-    if (estado.etapa === 'aguardando_tickers_extra') {
-        const tickersExtras = texto.toLowerCase() === 'não' || texto.toLowerCase() === 'nao'
-            ? []
-            : texto.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean);
-
-        const listaCompleta = [...listaPadrao.LISTA_PADRAO_COMPLETA, ...tickersExtras];
+        const valorInformado = texto.toLowerCase() === 'pular' ? null : parseFloat(texto.replace(',', '.'));
         estadoConversa.delete(chatId);
 
+        const listaCompleta = listaPadrao.LISTA_PADRAO_COMPLETA;
         const tempoEstimadoMin = Math.ceil(((listaCompleta.length + 4) * 8) / 60);
         await ctx.reply(
             `🔍 *Varredura iniciada* — ${listaCompleta.length} ativos + índices.\nTempo estimado: ~${tempoEstimadoMin} min (respeitando limite da API).\nAguarde...`,
@@ -93,8 +79,14 @@ bot.on('text', async (ctx) => {
             await ctx.reply(textoIndices, { parse_mode: 'Markdown' });
 
             const cotacoes = await mercado.buscarMultiplasCotacoes(listaCompleta);
-            const relatorio = analise.gerarRelatorioVarredura(cotacoes, estado.valorInvestir);
+            const relatorio = analise.gerarRelatorioVarredura(cotacoes, valorInformado);
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
+
+            // Ativos dentro do orçamento informado (preço unitário <= valor)
+            if (valorInformado) {
+                const textoOrcamento = analise.gerarRelatorioOrcamento(cotacoes, valorInformado);
+                await ctx.reply(textoOrcamento, { parse_mode: 'Markdown' });
+            }
 
             // Contexto de longo prazo apenas para os tops do ranking (economiza API)
             const { quedas, altas } = analise.classificarCotacoes(cotacoes);
@@ -104,7 +96,7 @@ bot.on('text', async (ctx) => {
             ];
 
             if (tickersParaContexto.length > 0) {
-                await ctx.reply(`📅 Buscando contexto de 12 meses para os destaques do dia...`);
+                await ctx.reply(`📅 Buscando contexto de longo prazo para os destaques do dia...`);
                 const contextos = await longoPrazo.buscarContextoLongoPrazo(tickersParaContexto);
                 const textoContexto = longoPrazo.formatarContextoLongoPrazo(contextos);
                 await ctx.reply(textoContexto, { parse_mode: 'Markdown' });
@@ -120,7 +112,7 @@ bot.on('text', async (ctx) => {
         const ticker = texto.toUpperCase();
         estadoConversa.delete(chatId);
 
-        await ctx.reply(`🔍 Buscando histórico de *${ticker}*...`, { parse_mode: 'Markdown' });
+        await ctx.reply(`🔍 Buscando histórico de \`${ticker}\`...`, { parse_mode: 'Markdown' });
 
         try {
             const historico = await grafico.buscarHistorico(ticker);
