@@ -1,6 +1,6 @@
 // Arquivo: bot.js — NOVA (Bot de Análise de Mercado)
 
-// CAPTURA DE ERROS PARA APARECER NO LOG
+// CAPTURA DE ERROS PARA APARECER NO LOG DO RENDER
 process.on('uncaughtException', (err) => {
     console.error('ERRO NÃO CAPTURADO:', err);
 });
@@ -17,6 +17,7 @@ const indices = require('./indices');
 const grafico = require('./grafico');
 const longoPrazo = require('./longoPrazo');
 const scanner = require('./scanner');
+const carteira = require('./carteira');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -32,7 +33,10 @@ bot.start((ctx) => ctx.reply(
     "Comandos disponíveis:\n" +
     "/investir — varredura completa de mercado\n" +
     "/grafico — gráfico dos últimos 30 dias de um ativo\n" +
-    "/scanner — análise individual (preço + fundamentos, quando disponíveis)",
+    "/scanner — análise individual (preço + fundamentos, quando disponíveis)\n" +
+    "/carteira — ver sua carteira (meta vs. atual)\n" +
+    "/carteira_add — adicionar ativo à carteira\n" +
+    "/carteira_remover — remover ativo da carteira",
     { parse_mode: 'Markdown' }
 ));
 
@@ -57,6 +61,34 @@ bot.command('scanner', async (ctx) => {
     await ctx.reply(
         "⚡ Qual ativo você quer analisar?\n\n(Ex: `PETR4.SA`, `AAPL`, `VALE3.SA`)\n\n" +
         "_Fundamentos financeiros disponíveis apenas para ativos do Brasil nesta versão._",
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('carteira', async (ctx) => {
+    await ctx.reply("📂 Calculando alocação atual da carteira...");
+    try {
+        const resultado = await carteira.calcularAlocacao();
+        const texto = carteira.formatarCarteira(resultado);
+        await ctx.reply(texto, { parse_mode: 'Markdown' });
+    } catch (e) {
+        console.error("Erro ao calcular carteira:", e.message);
+        await ctx.reply("⚠️ Ocorreu um erro ao calcular a carteira. Tente novamente com /carteira.");
+    }
+});
+
+bot.command('carteira_add', async (ctx) => {
+    estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_carteira_add' });
+    await ctx.reply(
+        "➕ Qual ativo você quer adicionar à carteira?\n\n(Ex: `HSBC`, `PETR4.SA`, `VOO`)",
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('carteira_remover', async (ctx) => {
+    estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_carteira_remover' });
+    await ctx.reply(
+        "➖ Qual ativo você quer remover da carteira?\n\n(Digite o ticker, ex: `HSBC`)",
         { parse_mode: 'Markdown' }
     );
 });
@@ -158,6 +190,67 @@ bot.on('text', async (ctx) => {
         } catch (e) {
             console.error("Erro no scanner:", e.message);
             await ctx.reply("⚠️ Ocorreu um erro ao escanear o ativo. Tente novamente com /scanner.");
+        }
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_ticker_carteira_add') {
+        const ticker = texto.toUpperCase();
+        estadoConversa.set(chatId, { etapa: 'aguardando_quantidade_carteira_add', ticker });
+        await ctx.reply("🔢 Quantas unidades/cotas você tem?\n\n(Ex: 2 ou 2.5)");
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_quantidade_carteira_add') {
+        const quantidade = parseFloat(texto.replace(',', '.'));
+        if (isNaN(quantidade) || quantidade <= 0) {
+            await ctx.reply("⚠️ Quantidade inválida. Digite um número, ex: 2 ou 2.5");
+            return;
+        }
+        estadoConversa.set(chatId, { ...estado, etapa: 'aguardando_meta_carteira_add', quantidade });
+        await ctx.reply("🎯 Qual a meta de alocação (%) desse ativo na sua carteira?\n\n(Ex: 25)");
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_meta_carteira_add') {
+        const metaPercentual = parseFloat(texto.replace(',', '.').replace('%', ''));
+        if (isNaN(metaPercentual) || metaPercentual <= 0 || metaPercentual > 100) {
+            await ctx.reply("⚠️ Meta inválida. Digite um número entre 0 e 100, ex: 25");
+            return;
+        }
+        estadoConversa.delete(chatId);
+
+        try {
+            const resultado = await carteira.adicionarAtivo(estado.ticker, estado.quantidade, metaPercentual);
+            if (resultado.sucesso) {
+                await ctx.reply(
+                    `✅ \`${estado.ticker}\` adicionado à carteira!\nQuantidade: ${estado.quantidade}\nMeta: ${metaPercentual}%\n\nUse /carteira para ver a alocação completa.`,
+                    { parse_mode: 'Markdown' }
+                );
+            } else {
+                await ctx.reply(`⚠️ Não foi possível salvar: ${resultado.erro}`);
+            }
+        } catch (e) {
+            console.error("Erro ao adicionar à carteira:", e.message);
+            await ctx.reply("⚠️ Ocorreu um erro ao salvar. Tente novamente com /carteira_add.");
+        }
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_ticker_carteira_remover') {
+        const ticker = texto.toUpperCase();
+        estadoConversa.delete(chatId);
+
+        try {
+            const resultado = await carteira.removerAtivo(ticker);
+            if (resultado.sucesso) {
+                await ctx.reply(`🗑️ \`${ticker}\` removido da carteira.`, { parse_mode: 'Markdown' });
+            } else {
+                await ctx.reply(`⚠️ Não foi possível remover: ${resultado.erro || 'ticker não encontrado'}`);
+            }
+        } catch (e) {
+            console.error("Erro ao remover da carteira:", e.message);
+            await ctx.reply("⚠️ Ocorreu um erro ao remover. Tente novamente com /carteira_remover.");
         }
         return;
     }
