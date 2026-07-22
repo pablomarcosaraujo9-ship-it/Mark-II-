@@ -25,8 +25,7 @@ const PORT = process.env.PORT || 3000;
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const app = express();
 
-// IMPORTANTE: NÃO usar express.json() quando usa webhook do Telegraf
-// O Telegraf lida com o body parser internamente
+// NÃO usar express.json() — vamos fazer parse manual no webhook
 
 const estadoConversa = new Map();
 
@@ -277,9 +276,26 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// ========== WEBHOOK ==========
-// O Telegraf lida com o body parser internamente — NÃO usar express.json()
-app.use(bot.webhookCallback('/webhook'));
+// ========== WEBHOOK — HANDLER MANUAL ==========
+// Não usa middleware do Telegraf. Faz parse manual do body.
+app.post('/webhook', (req, res) => {
+    let rawBody = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+        rawBody += chunk;
+    });
+    req.on('end', async () => {
+        try {
+            console.log('📩 Webhook recebido:', rawBody.substring(0, 100));
+            const update = JSON.parse(rawBody);
+            await bot.handleUpdate(update);
+            res.status(200).send('OK');
+        } catch (err) {
+            console.error('❌ Erro no webhook:', err.message);
+            res.status(200).send('OK'); // Sempre retorna 200 pro Telegram não retry
+        }
+    });
+});
 
 // Health check pro Azure saber que o app está vivo
 app.get('/', (req, res) => {
