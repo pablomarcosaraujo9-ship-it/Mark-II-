@@ -16,6 +16,7 @@ const analise = require('./analise');
 const indices = require('./indices');
 const grafico = require('./grafico');
 const longoPrazo = require('./longoPrazo');
+const scanner = require('./scanner');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -30,7 +31,8 @@ bot.start((ctx) => ctx.reply(
     "🚀 *NOVA Ativo!*\n\nSou seu bot de análise de mercado global (ações Brasil + EUA).\n\n" +
     "Comandos disponíveis:\n" +
     "/investir — varredura completa de mercado\n" +
-    "/grafico — gráfico dos últimos 30 dias de um ativo",
+    "/grafico — gráfico dos últimos 30 dias de um ativo\n" +
+    "/scanner — análise individual (preço + fundamentos, quando disponíveis)",
     { parse_mode: 'Markdown' }
 ));
 
@@ -46,6 +48,15 @@ bot.command('grafico', async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_grafico' });
     await ctx.reply(
         "📈 Qual ativo você quer ver no gráfico?\n\n(Ex: `PETR4.SA`, `AAPL`, `VALE3.SA`)",
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('scanner', async (ctx) => {
+    estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_scanner' });
+    await ctx.reply(
+        "⚡ Qual ativo você quer analisar?\n\n(Ex: `PETR4.SA`, `AAPL`, `VALE3.SA`)\n\n" +
+        "_Fundamentos financeiros disponíveis apenas para ativos do Brasil nesta versão._",
         { parse_mode: 'Markdown' }
     );
 });
@@ -133,6 +144,22 @@ bot.on('text', async (ctx) => {
         } catch (e) {
             console.error("Erro no gráfico:", e.message);
             await ctx.reply("⚠️ Ocorreu um erro ao gerar o gráfico. Tente novamente com /grafico.");
+        }
+        return;
+    }
+
+    if (estado.etapa === 'aguardando_ticker_scanner') {
+        const ticker = texto.toUpperCase();
+        estadoConversa.delete(chatId);
+
+        await ctx.reply(`⚡ Escaneando \`${ticker}\`...`, { parse_mode: 'Markdown' });
+
+        try {
+            const relatorio = await scanner.gerarRelatorioScanner(ticker);
+            await ctx.reply(relatorio, { parse_mode: 'Markdown' });
+        } catch (e) {
+            console.error("Erro no scanner:", e.message);
+            await ctx.reply("⚠️ Ocorreu um erro ao escanear o ativo. Tente novamente com /scanner.");
         }
         return;
     }
