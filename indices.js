@@ -125,7 +125,47 @@ function formatarIndices(indices) {
     return texto;
 }
 
+/**
+ * Gera um resumo de "sentimento do mercado" com base nos índices
+ * já coletados — puramente descritivo do que já aconteceu, não
+ * uma previsão do que vem a seguir.
+ */
+function calcularSentimentoMercado(indices) {
+    const validos = indices.filter((i) => i.sucesso);
+    if (validos.length === 0) {
+        return { emoji: '⚪', rotulo: 'Indisponível', texto: 'Não foi possível calcular o sentimento do mercado hoje.' };
+    }
+
+    const positivos = validos.filter((i) => i.variacaoPercentual > 0).length;
+    const negativos = validos.filter((i) => i.variacaoPercentual < 0).length;
+
+    let emoji, rotulo;
+    if (positivos > negativos) {
+        emoji = '🟢';
+        rotulo = 'Positivo';
+    } else if (negativos > positivos) {
+        emoji = '🔴';
+        rotulo = 'Negativo';
+    } else {
+        emoji = '🟡';
+        rotulo = 'Misto / Neutro';
+    }
+
+    const nomesPositivos = validos.filter((i) => i.variacaoPercentual > 0).map((i) => i.nome);
+    const nomesNegativos = validos.filter((i) => i.variacaoPercentual < 0).map((i) => i.nome);
+
+    let texto = '';
+    if (nomesNegativos.length > 0) texto += `${nomesNegativos.join(', ')} ${nomesNegativos.length > 1 ? 'caíram' : 'caiu'}`;
+    if (nomesNegativos.length > 0 && nomesPositivos.length > 0) texto += ', enquanto ';
+    if (nomesPositivos.length > 0) texto += `${nomesPositivos.join(', ')} ${nomesPositivos.length > 1 ? 'subiram' : 'subiu'}`;
+    texto += '.';
+
+    return { emoji, rotulo, texto };
+}
+
 module.exports = {
     buscarTodosIndices,
     formatarIndices,
+    calcularSentimentoMercado,
+    buscarDolar,
 };
