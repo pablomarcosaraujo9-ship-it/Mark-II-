@@ -25,9 +25,8 @@ const PORT = process.env.PORT || 3000;
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const app = express();
 
-// IMPORTANTE: NÃO usar express.json() globalmente quando usar webhook do Telegraf
+// IMPORTANTE: NÃO usar express.json() quando usa webhook do Telegraf
 // O Telegraf lida com o body parser internamente
-app.use(express.json());
 
 const estadoConversa = new Map();
 
@@ -279,16 +278,12 @@ bot.on('text', async (ctx) => {
 });
 
 // ========== WEBHOOK ==========
+// O Telegraf lida com o body parser internamente — NÃO usar express.json()
+app.use(bot.webhookCallback('/webhook'));
+
 // Health check pro Azure saber que o app está vivo
 app.get('/', (req, res) => {
     res.send('🤖 NOVA Bot online via Webhook!');
-});
-
-// Rota do webhook — DEPOIS de todas as outras rotas
-// O Telegraf v4+ precisa que o body seja raw para verificar a assinatura
-app.post('/webhook', (req, res) => {
-    // Repassa o body raw para o Telegraf
-    bot.handleUpdate(req.body, res);
 });
 
 app.listen(PORT, async () => {
