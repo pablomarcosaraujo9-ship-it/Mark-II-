@@ -1,10 +1,10 @@
 {
   "name": "project-mark-ii",
   "version": "1.0.0",
-  "description": "Bot de Roleta - Projeto Mark II",
-  "main": "index.js",
+  "description": "Bot de Análise de Mercado - Projeto Mark II",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "express": "^4.19.2",
