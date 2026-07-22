@@ -256,12 +256,29 @@ bot.on('text', async (ctx) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Porta ${PORT}`);
-    bot.launch()
-        .then(() => console.log("Telegram Conectado!"))
-        .catch((err) => console.error("Erro Telegraf:", err.message));
+// ========== WEBHOOK (substitui o polling) ==========
+// Rota que o Telegram vai bater quando alguém mandar mensagem
+app.use(bot.webhookCallback('/webhook'));
+
+// Health check pro Azure saber que o app está vivo
+app.get('/', (req, res) => {
+    res.send('🤖 NOVA Bot online via Webhook!');
 });
 
+app.listen(PORT, async () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+
+    // Configura o webhook automaticamente no Telegram
+    const webhookUrl = `https://meu-bot-telegram-2026-d9g8ekhheca2cfhg.canadacentral-01.azurewebsites.net/webhook`;
+
+    try {
+        await bot.telegram.setWebhook(webhookUrl);
+        console.log('✅ Webhook configurado:', webhookUrl);
+    } catch (err) {
+        console.error('❌ Erro ao configurar webhook:', err.message);
+    }
+});
+
+// Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
