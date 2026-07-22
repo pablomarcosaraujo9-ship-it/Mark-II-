@@ -1,6 +1,6 @@
 // Arquivo: bot.js — NOVA (Bot de Análise de Mercado)
 
-// CAPTURA DE ERROS PARA APARECER NO LOG DO RENDER
+// CAPTURA DE ERROS PARA APARECER NO LOG
 process.on('uncaughtException', (err) => {
     console.error('ERRO NÃO CAPTURADO:', err);
 });
@@ -93,13 +93,11 @@ bot.on('text', async (ctx) => {
             const relatorio = analise.gerarRelatorioVarredura(cotacoes, valorInformado);
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
 
-            // Ativos dentro do orçamento informado (preço unitário <= valor)
             if (valorInformado) {
                 const textoOrcamento = analise.gerarRelatorioOrcamento(cotacoes, valorInformado);
                 await ctx.reply(textoOrcamento, { parse_mode: 'Markdown' });
             }
 
-            // Contexto de longo prazo apenas para os tops do ranking (economiza API)
             const { quedas, altas } = analise.classificarCotacoes(cotacoes);
             const tickersParaContexto = [
                 ...quedas.slice(0, 3).map((c) => c.ticker),
