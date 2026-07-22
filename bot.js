@@ -40,6 +40,25 @@ bot.start((ctx) => ctx.reply(
     { parse_mode: 'Markdown' }
 ));
 
+// ========== COMANDO PARA VERIFICAR WEBHOOK ==========
+bot.command('webhook', async (ctx) => {
+    try {
+        const info = await bot.telegram.getWebhookInfo();
+        const url = info.url || "(não configurado)";
+        const pending = info.pending_update_count || 0;
+        const lastError = info.last_error_message || "nenhum";
+        await ctx.reply(
+            `🔍 *Status do Webhook*\n\n` +
+            `📍 URL: ${url}\n` +
+            `⏳ Updates pendentes: ${pending}\n` +
+            `❌ Último erro: ${lastError}`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (e) {
+        await ctx.reply(`⚠️ Erro ao verificar webhook: ${e.message}`);
+    }
+});
+
 bot.command('investir', async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_valor' });
     await ctx.reply(
