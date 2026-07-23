@@ -191,7 +191,7 @@ function formatarLinhaOrcamento(item) {
  * @param {number} orcamentoBRL
  * @param {Array} cotacoes - resultado de buscarMultiplasCotacoes()
  */
-async function analisarVarredura(orcamentoBRL, cotacoes) {
+async function gerarRelatorioVarredura(orcamentoBRL, cotacoes) {
     const ranking = gerarRanking(cotacoes);
     const relatorioOrcamento = await gerarRelatorioOrcamento(orcamentoBRL, cotacoes);
 
@@ -217,7 +217,7 @@ module.exports = {
     converterParaBRL,
     gerarRelatorioOrcamento,
     formatarLinhaOrcamento,
-    analisarVarredura,
+    gerarRelatorioVarredura,
     LIMITE_RELEVANCIA,
     LIMITE_INTENSIDADE_FORTE,
     LIMITE_INTENSIDADE_MODERADA,
