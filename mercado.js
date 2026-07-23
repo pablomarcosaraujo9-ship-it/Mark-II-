@@ -81,6 +81,33 @@ async function buscarCotacaoGlobal(ticker) {
 }
 
 /**
+ * NOVO — Busca a cotação atual USD/BRL via Twelve Data.
+ * Usada para converter preços de ativos americanos para reais
+ * antes de comparar com o orçamento do usuário (Fase 1 do roadmap).
+ *
+ * Retorna um número (ex: 5.42) ou lança erro se não conseguir obter.
+ */
+async function buscarCotacaoUSDBRL() {
+    try {
+        const url = `${TWELVEDATA_BASE_URL}/exchange_rate?symbol=USD/BRL&apikey=${TWELVEDATA_API_KEY}`;
+        const resposta = await fetch(url);
+        const dados = await resposta.json();
+
+        const cotacao = parseFloat(dados.rate);
+
+        if (!cotacao || isNaN(cotacao)) {
+            throw new Error(dados.message || 'Não foi possível obter a cotação USD/BRL');
+        }
+
+        return cotacao;
+    } catch (erro) {
+        // Repropaga o erro para quem chamou decidir como tratar
+        // (ex: analise.js pode decidir abortar ou usar um valor de fallback)
+        throw new Error(`Falha ao buscar cotação USD/BRL: ${erro.message}`);
+    }
+}
+
+/**
  * Ponto de entrada único: decide automaticamente qual fonte usar
  * com base no formato do ticker.
  */
@@ -115,4 +142,5 @@ async function buscarMultiplasCotacoes(tickers) {
 module.exports = {
     buscarCotacao,
     buscarMultiplasCotacoes,
+    buscarCotacaoUSDBRL,
 };
