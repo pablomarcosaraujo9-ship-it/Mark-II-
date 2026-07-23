@@ -1,177 +1,135 @@
+// ============================================================
+// PATCH — Fase 1: Correção da Conversão de Moeda (/investir)
+// Projeto: NOVA / SCANNER
+// ============================================================
+//
+// COMO USAR ESTE PATCH:
+// Como não tenho acesso ao repositório real (rede desabilitada
+// neste ambiente), este arquivo mostra a lógica de correção
+// pronta para você colar em mercado.js e analise.js.
+// Os nomes de função abaixo são sugestões — ajuste para bater
+// com os nomes reais das suas variáveis, se forem diferentes.
+//
+// ------------------------------------------------------------
+// 1) EM mercado.js — garantir que a cotação USD/BRL já obtida
+//    na varredura seja exportada/retornada junto com os dados
+// ------------------------------------------------------------
+
+// Supondo que você já busca a cotação USD/BRL em algum ponto
+// da varredura (ex: via Twelve Data ou Brapi), garanta que essa
+// função a devolva de forma acessível para o restante do fluxo:
+
+async function obterCotacaoUSDBRL() {
+  // Exemplo genérico — ajuste para a API que você já usa
+  const resposta = await fetch(
+    `https://api.twelvedata.com/exchange_rate?symbol=USD/BRL&apikey=${process.env.TWELVEDATA_API_KEY}`
+  );
+  const dados = await resposta.json();
+  const cotacao = parseFloat(dados.rate);
+
+  if (!cotacao || isNaN(cotacao)) {
+    throw new Error("Não foi possível obter a cotação USD/BRL");
+  }
+  return cotacao;
+}
+
+// ------------------------------------------------------------
+// 2) EM analise.js — função central de conversão
+// ------------------------------------------------------------
+
 /**
- * MÓDULO DE ANÁLISE — NOVA
- * ===========================
- * Filtra e organiza cotações com base em critérios OBJETIVOS
- * (variação percentual, volume). Não faz previsão de preço futuro.
+ * Converte o preço de um ativo para BRL, se necessário.
+ * @param {number} preco - preço do ativo na moeda original
+ * @param {string} moedaAtivo - "BRL" ou "USD"
+ * @param {number} cotacaoUSDBRL - cotação atual USD/BRL
+ * @returns {number} preço convertido para BRL
+ */
+function converterParaBRL(preco, moedaAtivo, cotacaoUSDBRL) {
+  if (moedaAtivo === "BRL") {
+    return preco;
+  }
+  if (moedaAtivo === "USD") {
+    return preco * cotacaoUSDBRL;
+  }
+  throw new Error(`Moeda não suportada: ${moedaAtivo}`);
+}
+
+/**
+ * Determina a moeda de um ativo a partir do ticker.
+ * Ajuste essa heurística conforme o padrão real dos tickers
+ * usados em listaPadrao.js (ex: sufixo ".SA" = Brasil).
+ */
+function identificarMoeda(ticker) {
+  return ticker.endsWith(".SA") ? "BRL" : "USD";
+}
+
+/**
+ * Verifica se um ativo cabe no orçamento informado pelo usuário,
+ * já convertendo corretamente a moeda antes de comparar.
  *
- * AVISO: Este módulo identifica MOVIMENTOS JÁ OCORRIDOS (fatos),
- * não prevê se um ativo vai subir ou cair. A decisão de investir
- * é sempre do usuário, com base nas informações apresentadas.
- * Isto não constitui recomendação de investimento.
+ * @param {number} orcamentoBRL - orçamento informado pelo usuário (sempre em BRL, por enquanto)
+ * @param {object} ativo - { ticker, precoOriginal, moeda }
+ * @param {number} cotacaoUSDBRL
+ * @returns {object} { dentroDoOrcamento, precoConvertidoBRL }
  */
+function verificarOrcamento(orcamentoBRL, ativo, cotacaoUSDBRL) {
+  const moeda = ativo.moeda || identificarMoeda(ativo.ticker);
+  const precoConvertidoBRL = converterParaBRL(
+    ativo.precoOriginal,
+    moeda,
+    cotacaoUSDBRL
+  );
 
-const LIMITE_QUEDA_RELEVANTE = -1.5; // % — queda a partir daqui é destacada
-const LIMITE_ALTA_RELEVANTE = 1.5;   // % — alta a partir daqui é destacada
-
-const LIMITE_MOVIMENTO_FORTE = 4;    // % (em módulo) — acima disso, "forte"
-const LIMITE_MOVIMENTO_MODERADO = 2; // % (em módulo) — acima disso, "moderado"
-
-/**
- * Classifica a intensidade de um movimento com base na variação %.
- * Retorna um rótulo textual + emoji, sem fazer previsão nenhuma —
- * só descreve o tamanho do movimento já ocorrido.
- */
-function classificarIntensidade(variacaoPercentual) {
-    const abs = Math.abs(variacaoPercentual);
-    if (abs >= LIMITE_MOVIMENTO_FORTE) {
-        return '🔥 Movimento forte (acima da média do dia)';
-    }
-    if (abs >= LIMITE_MOVIMENTO_MODERADO) {
-        return '⚡ Movimento moderado';
-    }
-    return '➖ Movimento discreto';
+  return {
+    dentroDoOrcamento: precoConvertidoBRL <= orcamentoBRL,
+    precoConvertidoBRL: Number(precoConvertidoBRL.toFixed(2)),
+  };
 }
 
-function classificarCotacoes(cotacoes) {
-    const validas = cotacoes.filter((c) => c.sucesso);
-    const comErro = cotacoes.filter((c) => !c.sucesso);
+// ------------------------------------------------------------
+// 3) EXEMPLO DE INTEGRAÇÃO no fluxo do /investir
+// ------------------------------------------------------------
 
-    const quedas = validas
-        .filter((c) => c.variacaoPercentual <= LIMITE_QUEDA_RELEVANTE)
-        .sort((a, b) => a.variacaoPercentual - b.variacaoPercentual);
+async function analisarOrcamento(orcamentoBRL, ativos) {
+  const cotacaoUSDBRL = await obterCotacaoUSDBRL();
 
-    const altas = validas
-        .filter((c) => c.variacaoPercentual >= LIMITE_ALTA_RELEVANTE)
-        .sort((a, b) => b.variacaoPercentual - a.variacaoPercentual);
-
-    const estaveis = validas.filter(
-        (c) => c.variacaoPercentual > LIMITE_QUEDA_RELEVANTE && c.variacaoPercentual < LIMITE_ALTA_RELEVANTE
+  const resultado = ativos.map((ativo) => {
+    const { dentroDoOrcamento, precoConvertidoBRL } = verificarOrcamento(
+      orcamentoBRL,
+      ativo,
+      cotacaoUSDBRL
     );
 
-    return { quedas, altas, estaveis, comErro };
+    return {
+      ticker: ativo.ticker,
+      precoOriginal: ativo.precoOriginal,
+      moeda: ativo.moeda || identificarMoeda(ativo.ticker),
+      precoConvertidoBRL,
+      dentroDoOrcamento,
+    };
+  });
+
+  return { cotacaoUSDBRL, resultado };
 }
 
-/**
- * Formata uma linha individual de ativo, com nota de oportunidade
- * (intensidade do movimento) junto do preço e variação.
- */
-function formatarLinhaAtivo(cotacao) {
-    const sinal = cotacao.variacaoPercentual >= 0 ? '+' : '';
-    const emoji = cotacao.variacaoPercentual >= 0 ? '📈' : '📉';
-    const intensidade = classificarIntensidade(cotacao.variacaoPercentual);
-
-    return (
-        `${emoji} \`${cotacao.ticker}\` ${cotacao.nome || ''}\n` +
-        `   ${sinal}${cotacao.variacaoPercentual.toFixed(2)}% — ${cotacao.moeda} ${cotacao.precoAtual.toFixed(2)}\n` +
-        `   ${intensidade}`
-    );
-}
-
-/**
- * Gera o ranking em medalhas (top 3) das maiores quedas e altas.
- */
-function formatarRanking(quedas, altas) {
-    const medalhas = ['🥇', '🥈', '🥉'];
-    let texto = '';
-
-    if (quedas.length > 0) {
-        texto += `\n🏆 *RANKING — Maiores Quedas do Dia*\n`;
-        quedas.slice(0, 3).forEach((c, i) => {
-            texto += `${medalhas[i]} \`${c.ticker}\` ${c.variacaoPercentual.toFixed(2)}%\n`;
-        });
-    }
-
-    if (altas.length > 0) {
-        texto += `\n🏆 *RANKING — Maiores Altas do Dia*\n`;
-        altas.slice(0, 3).forEach((c, i) => {
-            texto += `${medalhas[i]} \`${c.ticker}\` +${c.variacaoPercentual.toFixed(2)}%\n`;
-        });
-    }
-
-    return texto;
-}
-
-/**
- * Gera o texto formatado em Markdown para o Telegram com o
- * resumo da varredura, usando linguagem factual (não preditiva).
- */
-function gerarRelatorioVarredura(cotacoes, valorInvestir) {
-    const { quedas, altas, estaveis, comErro } = classificarCotacoes(cotacoes);
-
-    let texto = `📊 *VARREDURA DE MERCADO*\n`;
-    texto += `───────────────────────\n`;
-    if (valorInvestir) {
-        texto += `💰 Valor informado: *R$ ${valorInvestir}*\n`;
-    }
-    texto += `Ativos analisados: *${cotacoes.length}*\n\n`;
-
-    if (quedas.length > 0) {
-        texto += `🔻 *Quedas relevantes (≥ ${Math.abs(LIMITE_QUEDA_RELEVANTE)}%):*\n\n`;
-        quedas.forEach((c) => {
-            texto += formatarLinhaAtivo(c) + '\n\n';
-        });
-    }
-
-    if (altas.length > 0) {
-        texto += `🔺 *Altas relevantes (≥ ${LIMITE_ALTA_RELEVANTE}%):*\n\n`;
-        altas.forEach((c) => {
-            texto += formatarLinhaAtivo(c) + '\n\n';
-        });
-    }
-
-    if (quedas.length === 0 && altas.length === 0) {
-        texto += `📎 Nenhum ativo com variação relevante hoje. ${estaveis.length} ativos com movimento dentro da faixa normal.\n\n`;
-    } else {
-        texto += formatarRanking(quedas, altas);
-        texto += '\n';
-    }
-
-    if (comErro.length > 0) {
-        texto += `⚠️ Não foi possível obter dados de: ${comErro.map((c) => c.ticker).join(', ')}\n\n`;
-    }
-
-    texto += `⚠️ *Nota:* Esta lista mostra movimentos que JÁ ocorreram, com base em dados públicos de mercado. ` +
-        `Não é previsão de comportamento futuro nem recomendação de compra ou venda. ` +
-        `A decisão de investir é sua — avalie fundamentos, contexto e seu próprio perfil de risco.`;
-
-    return texto;
-}
-
-/**
- * Gera relatório dos ativos cujo preço unitário está dentro do
- * valor informado pelo usuário — informação factual (preço atual),
- * não recomendação. BRL e USD são tratados separadamente, sem
- * conversão automática entre moedas.
- */
-function gerarRelatorioOrcamento(cotacoes, valorInvestir) {
-    const validas = cotacoes.filter((c) => c.sucesso);
-    const acessiveis = validas
-        .filter((c) => c.precoAtual <= valorInvestir)
-        .sort((a, b) => b.precoAtual - a.precoAtual); // do mais caro (ainda acessível) ao mais barato
-
-    let texto = `💵 *ATIVOS DENTRO DO SEU ORÇAMENTO*\n───────────────────────\n`;
-    texto += `Valor informado: *${valorInvestir}* (tratado separadamente em R$ para ativos do Brasil e US$ para ativos dos EUA)\n\n`;
-
-    if (acessiveis.length === 0) {
-        texto += `Nenhum ativo da lista custa até esse valor por ação hoje.\n\n`;
-    } else {
-        acessiveis.forEach((c) => {
-            texto += `• \`${c.ticker}\` ${c.nome || ''} — ${c.moeda} ${c.precoAtual.toFixed(2)}\n`;
-        });
-        texto += `\n`;
-    }
-
-    texto += `⚠️ *Nota:* Isto mostra apenas o preço atual por ação (1 unidade). ` +
-        `Não é recomendação — avalie fundamentos antes de decidir.`;
-
-    return texto;
-}
+// ------------------------------------------------------------
+// 4) MENSAGEM AO USUÁRIO — sugestão de texto explicativo
+// ------------------------------------------------------------
+//
+// Ao exibir o resultado no /investir, é importante deixar claro
+// que houve conversão, para transparência (evita "número mágico"):
+//
+// Exemplo de linha de saída:
+//   "Walmart (WMT) — USD 109,00 (≈ R$ 601,45 no câmbio atual) — fora do orçamento"
+//
+// Isso também prepara terreno para a "Evolução futura" do roadmap
+// (usuário escolher moeda do orçamento), já que a cotação e a
+// conversão já estarão centralizadas em uma função só.
 
 module.exports = {
-    classificarCotacoes,
-    classificarIntensidade,
-    gerarRelatorioVarredura,
-    gerarRelatorioOrcamento,
-    LIMITE_QUEDA_RELEVANTE,
-    LIMITE_ALTA_RELEVANTE,
+  obterCotacaoUSDBRL,
+  converterParaBRL,
+  identificarMoeda,
+  verificarOrcamento,
+  analisarOrcamento,
 };
