@@ -1,187 +1,142 @@
-/**
- * MÓDULO CARTEIRA — NOVA
- * =========================
- * Persistência dos ativos da carteira via Supabase (Postgres gratuito).
- * Guarda ticker, quantidade e percentual-meta definidos pelo usuário.
- *
- * PRINCÍPIO DE SEGURANÇA: o bot NUNCA sugere venda. Ele só aponta
- * onde os PRÓXIMOS APORTES podem ser direcionados para aproximar
- * a carteira da meta definida pelo próprio usuário.
- */
+// Arquivo: carteira.js — NOVA (Carteira em arquivo local, sem Supabase)
 
-const mercado = require('./mercado');
-const indices = require('./indices');
+const fs = require('fs');
+const path = require('path');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const CARTEIRA_PATH = path.join(__dirname, 'carteira.json');
 
-const HEADERS = {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/json',
-};
-
-/**
- * Lista todos os ativos cadastrados na carteira.
- */
-async function buscarCarteira() {
+// ─── Helpers ─────────────────────────────────────────────
+function lerCarteira() {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/carteira?select=*&order=criado_em.asc`;
-        const resposta = await fetch(url, { headers: HEADERS });
-        if (!resposta.ok) {
-            const erro = await resposta.text();
-            return { sucesso: false, erro };
-        }
-        const dados = await resposta.json();
-        return { sucesso: true, ativos: dados };
-    } catch (erro) {
-        return { sucesso: false, erro: erro.message };
+        if (!fs.existsSync(CARTEIRA_PATH)) return [];
+        const raw = fs.readFileSync(CARTEIRA_PATH, 'utf8');
+        return JSON.parse(raw);
+    } catch (e) {
+        console.error('Erro ao ler carteira:', e.message);
+        return [];
     }
 }
 
-/**
- * Adiciona um novo ativo à carteira.
- */
-async function adicionarAtivo(ticker, quantidade, metaPercentual) {
+function salvarCarteira(carteira) {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/carteira`;
-        const resposta = await fetch(url, {
-            method: 'POST',
-            headers: { ...HEADERS, Prefer: 'return=representation' },
-            body: JSON.stringify({
-                ticker: ticker.toUpperCase(),
-                quantidade,
-                meta_percentual: metaPercentual,
-            }),
-        });
-        if (!resposta.ok) {
-            const erro = await resposta.text();
-            return { sucesso: false, erro };
-        }
-        return { sucesso: true };
-    } catch (erro) {
-        return { sucesso: false, erro: erro.message };
+        fs.writeFileSync(CARTEIRA_PATH, JSON.stringify(carteira, null, 2), 'utf8');
+        return true;
+    } catch (e) {
+        console.error('Erro ao salvar carteira:', e.message);
+        return false;
     }
 }
 
-/**
- * Remove um ativo da carteira pelo ticker.
- */
-async function removerAtivo(ticker) {
+async function buscarPreco(ticker) {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/carteira?ticker=eq.${encodeURIComponent(ticker.toUpperCase())}`;
-        const resposta = await fetch(url, { method: 'DELETE', headers: HEADERS });
-        if (!resposta.ok) {
-            const erro = await resposta.text();
-            return { sucesso: false, erro };
-        }
-        return { sucesso: true };
-    } catch (erro) {
-        return { sucesso: false, erro: erro.message };
+        const symbol = ticker.toUpperCase();
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const preco = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (!preco) throw new Error('Preço não disponível');
+        return parseFloat(preco);
+    } catch (e) {
+        console.error(`Erro ao buscar ${ticker}:`, e.message);
+        return null;
     }
 }
 
-/**
- * Calcula a alocação atual (%) de cada ativo, convertendo tudo para
- * uma base comum em Reais (usa a cotação do dólar do dia para
- * ativos em USD), e compara com a meta definida pelo usuário.
- */
+// ─── Funções principais ──────────────────────────────────
+
 async function calcularAlocacao() {
-    const carteira = await buscarCarteira();
-    if (!carteira.sucesso) {
-        return { sucesso: false, erro: carteira.erro };
-    }
-    if (carteira.ativos.length === 0) {
-        return { sucesso: true, vazio: true };
+    const carteira = lerCarteira();
+    if (carteira.length === 0) {
+        return { ativos: [], total: 0, vazio: true };
     }
 
-    const dolarInfo = await indices.buscarDolar();
-    const taxaDolar = dolarInfo.sucesso ? dolarInfo.valor : null;
+    const ativosComPreco = [];
+    let total = 0;
 
-    const posicoes = [];
-    for (let i = 0; i < carteira.ativos.length; i++) {
-        const item = carteira.ativos[i];
-        const cotacao = await mercado.buscarCotacao(item.ticker);
-
-        if (cotacao.sucesso) {
-            let valorEmReais = cotacao.precoAtual * item.quantidade;
-            if (cotacao.moeda === 'USD') {
-                valorEmReais = taxaDolar ? valorEmReais * taxaDolar : null;
-            }
-            posicoes.push({
-                ticker: item.ticker,
-                metaPercentual: item.meta_percentual,
-                valorEmReais,
-                precoAtual: cotacao.precoAtual,
-                moeda: cotacao.moeda,
-                quantidade: item.quantidade,
-            });
-        } else {
-            posicoes.push({
-                ticker: item.ticker,
-                metaPercentual: item.meta_percentual,
-                valorEmReais: null,
-                erro: cotacao.erro,
-            });
-        }
-
-        if (i < carteira.ativos.length - 1) {
-            await new Promise((r) => setTimeout(r, 8000));
-        }
+    for (const item of carteira) {
+        const preco = await buscarPreco(item.ticker);
+        const valor = preco ? preco * item.quantidade : 0;
+        ativosComPreco.push({
+            ticker: item.ticker,
+            quantidade: item.quantidade,
+            metaPercentual: item.metaPercentual,
+            preco: preco,
+            valor: valor,
+        });
+        total += valor;
     }
 
-    const valorTotal = posicoes.reduce((soma, p) => soma + (p.valorEmReais || 0), 0);
+    // Calcula percentuais reais
+    for (const ativo of ativosComPreco) {
+        ativo.percentualReal = total > 0 ? ((ativo.valor / total) * 100).toFixed(2) : '0.00';
+        ativo.diferenca = (parseFloat(ativo.percentualReal) - ativo.metaPercentual).toFixed(2);
+    }
 
-    const posicoesComPercentual = posicoes.map((p) => {
-        const atualPercentual = p.valorEmReais !== null && valorTotal > 0 ? (p.valorEmReais / valorTotal) * 100 : null;
-        const diferenca = atualPercentual !== null ? p.metaPercentual - atualPercentual : null;
-        return { ...p, atualPercentual, diferenca };
-    });
-
-    return { sucesso: true, vazio: false, posicoes: posicoesComPercentual, valorTotal };
+    return { ativos: ativosComPreco, total: total.toFixed(2), vazio: false };
 }
 
-/**
- * Formata o relatório de carteira em Markdown para o Telegram.
- */
 function formatarCarteira(resultado) {
-    if (!resultado.sucesso) {
-        return `⚠️ Não foi possível acessar a carteira: ${resultado.erro}`;
-    }
     if (resultado.vazio) {
-        return `📂 *Sua carteira está vazia.*\n\nUse /carteira_add para adicionar o primeiro ativo.`;
+        return `📂 *Sua Carteira*\n\n` +
+            `_Carteira vazia._\n\n` +
+            `Use /carteira_add para adicionar ativos.`;
     }
 
-    let texto = `📂 *CARTEIRA NOVA*\n───────────────────────\n\n`;
-    texto += `*Meta vs. Atual:*\n\n`;
+    let texto = `📂 *Sua Carteira*\n` +
+        `💰 Valor total: R$ / US$ ${resultado.total}\n` +
+        `───────────────────────\n\n`;
 
-    resultado.posicoes.forEach((p) => {
-        texto += `\`${p.ticker}\`\n`;
-        texto += `   Meta: ${p.metaPercentual.toFixed(1)}%\n`;
-        if (p.atualPercentual !== null) {
-            texto += `   Atual: ${p.atualPercentual.toFixed(1)}%\n`;
-        } else {
-            texto += `   Atual: indisponível (${p.erro || 'sem cotação'})\n`;
-        }
-        texto += `\n`;
-    });
-
-    const comDiferenca = resultado.posicoes.filter((p) => p.diferenca !== null && p.diferenca > 0);
-    if (comDiferenca.length > 0) {
-        const maisAbaixo = [...comDiferenca].sort((a, b) => b.diferenca - a.diferenca).slice(0, 2);
-        texto += `💡 *Próximo aporte:*\nPriorizar ${maisAbaixo.map((p) => `\`${p.ticker}\``).join(' e ')} (mais abaixo da meta).\n\n`;
+    for (const a of resultado.ativos) {
+        const precoStr = a.preco ? `R$ / US$ ${a.preco.toFixed(2)}` : 'Preço indisponível';
+        const emojiDiff = parseFloat(a.diferenca) > 0 ? '🟢' : parseFloat(a.diferenca) < 0 ? '🔴' : '⚪';
+        texto += `• *${a.ticker}*\n` +
+            `  Quantidade: ${a.quantidade}\n` +
+            `  Preço atual: ${precoStr}\n` +
+            `  Valor: ${a.valor.toFixed(2)}\n` +
+            `  Meta: ${a.metaPercentual}% | Real: ${a.percentualReal}%\n` +
+            `  ${emojiDiff} Diferença: ${a.diferenca}%\n\n`;
     }
 
-    texto += `⚖️ *Rebalanceamento:* o NOVA nunca sugere venda — só aponta onde os próximos aportes aproximam sua carteira da meta que você definiu.\n\n`;
-    texto += `⚠️ Passado ≠ futuro. Isto é informação, não recomendação.`;
-
+    texto += `⚠️ _Alocação calculada com base nos preços atuais do mercado._`;
     return texto;
 }
 
+async function adicionarAtivo(ticker, quantidade, metaPercentual) {
+    const carteira = lerCarteira();
+    const idx = carteira.findIndex(a => a.ticker.toUpperCase() === ticker.toUpperCase());
+
+    if (idx >= 0) {
+        carteira[idx].quantidade = quantidade;
+        carteira[idx].metaPercentual = metaPercentual;
+    } else {
+        carteira.push({
+            ticker: ticker.toUpperCase(),
+            quantidade: quantidade,
+            metaPercentual: metaPercentual,
+            criadoEm: new Date().toISOString(),
+        });
+    }
+
+    const ok = salvarCarteira(carteira);
+    return { sucesso: ok, erro: ok ? null : 'Falha ao salvar arquivo' };
+}
+
+async function removerAtivo(ticker) {
+    let carteira = lerCarteira();
+    const antes = carteira.length;
+    carteira = carteira.filter(a => a.ticker.toUpperCase() !== ticker.toUpperCase());
+
+    if (carteira.length === antes) {
+        return { sucesso: false, erro: 'Ativo não encontrado' };
+    }
+
+    const ok = salvarCarteira(carteira);
+    return { sucesso: ok, erro: ok ? null : 'Falha ao salvar arquivo' };
+}
+
 module.exports = {
-    buscarCarteira,
-    adicionarAtivo,
-    removerAtivo,
     calcularAlocacao,
     formatarCarteira,
+    adicionarAtivo,
+    removerAtivo,
 };
