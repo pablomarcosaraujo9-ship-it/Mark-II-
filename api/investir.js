@@ -1,34 +1,33 @@
+// Arquivo: api/investir.js — endpoint do site NOVA Web (Vercel)
+//
+// IMPORTANTE: este arquivo reaproveita o MESMO mercado.js e
+// analise.js que o bot de Telegram usa (por isso o require com
+// "../"). Segue os mesmos princípios do bot:
+// - Nunca recomenda compra ou venda.
+// - Nunca mostra "potencial" ou "preço-alvo".
+// - Informação de mercado passada/atual, sempre descritiva.
+
 const mercado = require('../mercado');
+const analise = require('../analise');
+const listaPadrao = require('../listaPadrao');
 
 module.exports = async (req, res) => {
-  try {
-    const dados = await mercado.buscarDadosMercado();
-    
-    const compras = dados.filter(acao => acao.sinal === 'COMPRA');
-    
-    const top5 = compras
-      .sort((a, b) => b.potencial - a.potencial)
-      .slice(0, 5);
-    
-    let texto = `📊 TOP 5 AÇÕES PARA HOJE\n\n`;
-    
-    if (top5.length === 0) {
-      texto += `Nenhuma oportunidade de COMPRA encontrada agora.`;
-    } else {
-      top5.forEach((acao, index) => {
-        texto += `${index + 1}. ${acao.ticker}\n`;
-        texto += `   Preço: R$ ${acao.preco.toFixed(2)}\n`;
-        texto += `   Potencial: ${acao.potencial}%\n`;
-        texto += `   Alvo: R$ ${acao.alvo.toFixed(2)}\n\n`;
-      });
+    try {
+        const tickers = listaPadrao.LISTA_PADRAO_COMPLETA;
+
+        // Usa a versão em lotes paralelos (não a sequencial do bot),
+        // porque a Vercel no plano grátis corta a função em 10s.
+        const cotacoes = await mercado.buscarMultiplasCotacoesParalelo(tickers);
+
+        // Mesmo texto de ranking que o bot manda no Telegram —
+        // sem valor de orçamento aqui, só o ranking do dia.
+        const texto = analise.gerarRelatorioVarredura(cotacoes, null);
+
+        res.status(200).json({ texto });
+    } catch (error) {
+        console.error('Erro no endpoint /api/investir:', error);
+        res.status(500).json({
+            texto: `⚠️ Erro ao buscar dados de mercado: ${error.message}`,
+        });
     }
-    
-    res.status(200).json({ texto });
-    
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ 
-      texto: `Erro na análise: ${error.message}` 
-    });
-  }
 };
