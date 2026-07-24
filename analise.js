@@ -3,42 +3,33 @@
  * ==========================
  * Responsável por:
  * - Classificar a intensidade dos movimentos de mercado
- * - Filtrar o que é relevante (ignora ruído de variações pequenas)
- * - Gerar ranking dos ativos com maior movimento
- * - Gerar relatório de orçamento (o que cabe no valor informado
- *   pelo usuário), com conversão correta de moeda (Fase 1 do roadmap)
+ * - Separar altas e quedas relevantes (classificarCotacoes)
+ * - Gerar o texto do ranking do dia (gerarRelatorioVarredura)
+ * - Gerar o texto do relatório de orçamento, já convertendo
+ *   ativos em USD para BRL antes de comparar (gerarRelatorioOrcamento)
+ *
+ * IMPORTANTE — formato de retorno:
+ * O bot.js chama estas funções e passa o resultado DIRETO pro
+ * ctx.reply(...), então gerarRelatorioVarredura e
+ * gerarRelatorioOrcamento devem retornar sempre uma STRING
+ * pronta em Markdown — nunca um objeto, nunca uma Promise não
+ * resolvida.
  *
  * PRINCÍPIOS (não negociáveis — ver roadmap NOVA/SCANNER):
  * - Nunca recomenda compra ou venda.
  * - Nunca promete rentabilidade.
- * - Classificações são sempre descritivas, nunca prescritivas
- *   (ex: "movimento forte", nunca "boa oportunidade" ou pontuação
- *   tipo "82/100").
+ * - Classificações são sempre descritivas, nunca prescritivas.
  * - Sempre deixa claro que é informação de mercado passada/atual,
  *   não previsão.
  */
 
 const { buscarCotacaoUSDBRL } = require('./mercado');
 
-/**
- * Blindagem: se por algum motivo receber uma Promise em vez do
- * array já resolvido (ex: esquecimento de "await" em bot.js),
- * resolve automaticamente em vez de quebrar com
- * "cotacoes.filter is not a function".
- */
-async function resolverCotacoes(cotacoes) {
-    const resolvido = await Promise.resolve(cotacoes);
-    if (!Array.isArray(resolvido)) {
-        throw new Error('cotacoes precisa ser um array (ou Promise que resolve para um array)');
-    }
-    return resolvido;
-}
-
 // ------------------------------------------------------------
 // LIMIARES DE CLASSIFICAÇÃO
 // ------------------------------------------------------------
 
-const LIMITE_RELEVANCIA = 1.5;   // abaixo disso, variação é tratada como ruído
+const LIMITE_RELEVANCIA = 1.5;          // abaixo disso, variação é tratada como ruído
 const LIMITE_INTENSIDADE_FORTE = 4;     // |variação%| >= 4  → "forte"
 const LIMITE_INTENSIDADE_MODERADA = 2;  // |variação%| >= 2  → "moderado"
 // abaixo de 2% (mas acima do limite de relevância) → "normal"
@@ -47,14 +38,6 @@ const LIMITE_INTENSIDADE_MODERADA = 2;  // |variação%| >= 2  → "moderado"
 // CLASSIFICAÇÃO DE INTENSIDADE
 // ------------------------------------------------------------
 
-/**
- * Classifica a intensidade de um movimento com base na variação
- * percentual absoluta. Retorna sempre um rótulo descritivo,
- * nunca uma recomendação.
- *
- * @param {number} variacaoPercentual
- * @returns {"forte"|"moderado"|"normal"}
- */
 function classificarIntensidade(variacaoPercentual) {
     const variacaoAbsoluta = Math.abs(variacaoPercentual);
 
@@ -67,42 +50,31 @@ function classificarIntensidade(variacaoPercentual) {
     return 'normal';
 }
 
-/**
- * Retorna um emoji descritivo para a direção do movimento.
- * Puramente visual — não é indicativo de recomendação.
- */
 function emojiDirecao(variacaoPercentual) {
     if (variacaoPercentual > 0) return '🟢';
     if (variacaoPercentual < 0) return '🔴';
     return '⚪';
 }
 
-/**
- * Verifica se a variação de um ativo é relevante o suficiente
- * para aparecer em destaque no ranking (filtra ruído).
- */
 function ehRelevante(variacaoPercentual) {
     return Math.abs(variacaoPercentual) >= LIMITE_RELEVANCIA;
 }
 
 // ------------------------------------------------------------
-// RANKING
+// SEPARAÇÃO EM ALTAS / QUEDAS
 // ------------------------------------------------------------
 
 /**
- * Classifica TODAS as cotações bem-sucedidas (sem filtrar por
- * relevância), adicionando intensidade e emoji descritivos.
- * Usada quando o bot precisa exibir a lista completa de ativos
- * (não só os destaques do ranking).
+ * Separa as cotações bem-sucedidas e relevantes em dois grupos:
+ * quedas (variação negativa) e altas (variação positiva),
+ * cada um já ordenado do movimento mais intenso para o menos intenso.
  *
- * @param {Array|Promise<Array>} cotacoes - resultado de buscarMultiplasCotacoes()
- * @returns {Promise<Array>}
+ * @param {Array} cotacoes - resultado de mercado.buscarMultiplasCotacoes()
+ * @returns {{ quedas: Array, altas: Array }}
  */
-async function classificarCotacoes(cotacoes) {
-    const lista = await resolverCotacoes(cotacoes);
-
-    return lista
-        .filter((c) => c.sucesso)
+function classificarCotacoes(cotacoes) {
+    const relevantes = (cotacoes || [])
+        .filter((c) => c.sucesso && ehRelevante(c.variacaoPercentual))
         .map((c) => ({
             ticker: c.ticker,
             nome: c.nome,
@@ -113,37 +85,70 @@ async function classificarCotacoes(cotacoes) {
             moeda: c.moeda,
             mercado: c.mercado,
         }));
+
+    const quedas = relevantes
+        .filter((c) => c.variacaoPercentual < 0)
+        .sort((a, b) => a.variacaoPercentual - b.variacaoPercentual); // mais negativo primeiro
+
+    const altas = relevantes
+        .filter((c) => c.variacaoPercentual > 0)
+        .sort((a, b) => b.variacaoPercentual - a.variacaoPercentual); // mais positivo primeiro
+
+    return { quedas, altas };
 }
 
-/**
- * Gera um ranking dos ativos com maior variação absoluta,
- * a partir da lista de cotações já buscadas (ver mercado.js).
- * Ignora ativos com erro de busca e ativos abaixo do limite
- * de relevância.
- *
- * @param {Array|Promise<Array>} cotacoes - resultado de buscarMultiplasCotacoes()
- * @returns {Promise<Array>} ranking ordenado do maior para o menor movimento absoluto
- */
-async function gerarRanking(cotacoes) {
-    const classificadas = await classificarCotacoes(cotacoes);
+// ------------------------------------------------------------
+// TEXTO DO RANKING (usado logo após a varredura)
+// ------------------------------------------------------------
 
-    return classificadas
-        .filter((c) => ehRelevante(c.variacaoPercentual))
-        .sort((a, b) => Math.abs(b.variacaoPercentual) - Math.abs(a.variacaoPercentual));
+/**
+ * Gera o texto (Markdown) do ranking do dia — maiores altas e
+ * maiores quedas relevantes. SÍNCRONA: retorna string direto,
+ * pois o bot.js chama sem "await".
+ *
+ * @param {Array} cotacoes - resultado de mercado.buscarMultiplasCotacoes()
+ * @param {number|null} valorInformado - não usado no ranking em si,
+ *   mantido no parâmetro para compatibilidade com a chamada do bot.js
+ * @returns {string}
+ */
+function gerarRelatorioVarredura(cotacoes, valorInformado) {
+    const { quedas, altas } = classificarCotacoes(cotacoes);
+
+    if (quedas.length === 0 && altas.length === 0) {
+        return (
+            '📊 *Ranking do Dia*\n\n' +
+            'Nenhuma variação relevante (acima de 1,5%) encontrada nesta varredura.\n\n' +
+            '_Informação de mercado passada/atual — não é previsão nem recomendação._'
+        );
+    }
+
+    let texto = '📊 *Ranking do Dia*\n\n';
+
+    if (altas.length > 0) {
+        texto += '🟢 *Maiores Altas*\n';
+        altas.slice(0, 5).forEach((c) => {
+            texto += `${c.emoji} \`${c.ticker}\` — ${c.variacaoPercentual.toFixed(2)}% (${c.intensidade})\n`;
+        });
+        texto += '\n';
+    }
+
+    if (quedas.length > 0) {
+        texto += '🔴 *Maiores Quedas*\n';
+        quedas.slice(0, 5).forEach((c) => {
+            texto += `${c.emoji} \`${c.ticker}\` — ${c.variacaoPercentual.toFixed(2)}% (${c.intensidade})\n`;
+        });
+        texto += '\n';
+    }
+
+    texto += '_Informação de mercado passada/atual — não é previsão nem recomendação._';
+
+    return texto;
 }
 
 // ------------------------------------------------------------
 // CONVERSÃO DE MOEDA (Fase 1 do roadmap)
 // ------------------------------------------------------------
 
-/**
- * Converte um preço para BRL, se necessário.
- *
- * @param {number} preco
- * @param {string} moeda - "BRL", "USD", etc (vem de mercado.js)
- * @param {number} cotacaoUSDBRL
- * @returns {number} preço em BRL
- */
 function converterParaBRL(preco, moeda, cotacaoUSDBRL) {
     if (!moeda || moeda === 'BRL') {
         return preco;
@@ -151,96 +156,75 @@ function converterParaBRL(preco, moeda, cotacaoUSDBRL) {
     if (moeda === 'USD') {
         return preco * cotacaoUSDBRL;
     }
-    // Outras moedas (ex: EUR) não são suportadas ainda —
-    // melhor sinalizar isso do que assumir conversão incorreta.
     throw new Error(`Conversão não suportada para a moeda: ${moeda}`);
 }
 
+function formatarLinhaOrcamento(item) {
+    if (item.moedaOriginal === 'BRL') {
+        return `\`${item.ticker}\` — R$ ${item.precoOriginal.toFixed(2)}`;
+    }
+    return `\`${item.ticker}\` — ${item.moedaOriginal} ${item.precoOriginal.toFixed(2)} (≈ R$ ${item.precoConvertidoBRL.toFixed(2)})`;
+}
+
 // ------------------------------------------------------------
-// RELATÓRIO DE ORÇAMENTO
+// TEXTO DO RELATÓRIO DE ORÇAMENTO
 // ------------------------------------------------------------
 
 /**
- * Gera o relatório de orçamento: para cada ativo buscado, informa
- * se ele cabe no valor que o usuário digitou no /investir — já
- * convertendo corretamente ativos americanos (USD) para reais
- * antes de comparar (correção da Fase 1).
+ * Gera o texto (Markdown) do relatório de orçamento, já com a
+ * conversão correta USD→BRL (correção da Fase 1 do roadmap).
  *
- * @param {number} orcamentoBRL - valor informado pelo usuário, em reais
- * @param {Array} cotacoes - resultado de buscarMultiplasCotacoes()
- * @returns {Promise<object>} { cotacaoUSDBRL, itens }
+ * ASSÍNCRONA: precisa buscar a cotação USD/BRL ao vivo, então
+ * retorna uma Promise<string>. IMPORTANTE: a chamada em bot.js
+ * precisa usar "await" aqui (ver instrução de patch abaixo).
+ *
+ * @param {Array} cotacoes - resultado de mercado.buscarMultiplasCotacoes()
+ * @param {number|null} valorInformado - valor em reais digitado pelo usuário
+ * @returns {Promise<string>}
  */
-async function gerarRelatorioOrcamento(orcamentoBRL, cotacoes) {
-    const lista = await resolverCotacoes(cotacoes);
-    const cotacaoUSDBRL = await buscarCotacaoUSDBRL();
+async function gerarRelatorioOrcamento(cotacoes, valorInformado) {
+    if (!valorInformado) {
+        return '💰 Nenhum orçamento foi informado nesta varredura.';
+    }
 
-    const itens = lista
+    let cotacaoUSDBRL;
+    try {
+        cotacaoUSDBRL = await buscarCotacaoUSDBRL();
+    } catch (erro) {
+        return `⚠️ Não foi possível obter a cotação USD/BRL para calcular o orçamento (${erro.message}).`;
+    }
+
+    const itens = (cotacoes || [])
         .filter((c) => c.sucesso)
         .map((c) => {
-            const precoConvertidoBRL = converterParaBRL(
-                c.precoAtual,
-                c.moeda,
-                cotacaoUSDBRL
-            );
-
+            const precoConvertidoBRL = converterParaBRL(c.precoAtual, c.moeda, cotacaoUSDBRL);
             return {
                 ticker: c.ticker,
-                nome: c.nome,
                 precoOriginal: c.precoAtual,
                 moedaOriginal: c.moeda,
                 precoConvertidoBRL: Number(precoConvertidoBRL.toFixed(2)),
-                dentroDoOrcamento: precoConvertidoBRL <= orcamentoBRL,
+                dentroDoOrcamento: precoConvertidoBRL <= valorInformado,
             };
         })
         .sort((a, b) => a.precoConvertidoBRL - b.precoConvertidoBRL);
 
-    return { cotacaoUSDBRL, itens };
-}
+    const dentro = itens.filter((i) => i.dentroDoOrcamento);
 
-/**
- * Formata uma linha de texto para exibir um item do relatório de
- * orçamento no Telegram, deixando explícita a conversão de moeda
- * (transparência para o usuário, conforme sugerido no patch da Fase 1).
- */
-function formatarLinhaOrcamento(item) {
-    const status = item.dentroDoOrcamento ? '✅ dentro do orçamento' : '⛔ fora do orçamento';
+    let texto =
+        `💰 *Relatório de Orçamento* (R$ ${valorInformado.toFixed(2)})\n` +
+        `_Cotação USD/BRL usada: ${cotacaoUSDBRL.toFixed(2)}_\n\n`;
 
-    if (item.moedaOriginal === 'BRL') {
-        return `${item.ticker} — R$ ${item.precoOriginal.toFixed(2)} — ${status}`;
+    if (dentro.length === 0) {
+        texto += 'Nenhum ativo da lista está dentro desse orçamento no momento.';
+        return texto;
     }
 
-    return `${item.ticker} — ${item.moedaOriginal} ${item.precoOriginal.toFixed(2)} ` +
-        `(≈ R$ ${item.precoConvertidoBRL.toFixed(2)}) — ${status}`;
-}
+    texto += '✅ *Dentro do orçamento:*\n';
+    dentro.forEach((item) => {
+        texto += formatarLinhaOrcamento(item) + '\n';
+    });
 
-// ------------------------------------------------------------
-// RELATÓRIO COMPLETO DE VARREDURA (usado pelo /investir)
-// ------------------------------------------------------------
-
-/**
- * Combina ranking + relatório de orçamento em um único resultado,
- * pronto para ser formatado e enviado pelo bot.js.
- *
- * @param {number} orcamentoBRL
- * @param {Array} cotacoes - resultado de buscarMultiplasCotacoes()
- */
-async function gerarRelatorioVarredura(orcamentoBRL, cotacoes) {
-    const lista = await resolverCotacoes(cotacoes);
-    const ranking = await gerarRanking(lista);
-    const relatorioOrcamento = await gerarRelatorioOrcamento(orcamentoBRL, lista);
-
-    const erros = lista
-        .filter((c) => !c.sucesso)
-        .map((c) => ({ ticker: c.ticker, erro: c.erro }));
-
-    return {
-        ranking,
-        relatorioOrcamento,
-        erros,
-        avisoPadrao:
-            'Informação com base em dados de mercado passados/atuais. ' +
-            'Isso não é previsão de comportamento futuro nem recomendação de compra ou venda.',
-    };
+    return texto.trim();
 }
 
 module.exports = {
@@ -248,11 +232,9 @@ module.exports = {
     emojiDirecao,
     ehRelevante,
     classificarCotacoes,
-    gerarRanking,
+    gerarRelatorioVarredura,
     converterParaBRL,
     gerarRelatorioOrcamento,
-    formatarLinhaOrcamento,
-    gerarRelatorioVarredura,
     LIMITE_RELEVANCIA,
     LIMITE_INTENSIDADE_FORTE,
     LIMITE_INTENSIDADE_MODERADA,
