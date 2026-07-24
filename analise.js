@@ -20,6 +20,20 @@
 
 const { buscarCotacaoUSDBRL } = require('./mercado');
 
+/**
+ * Blindagem: se por algum motivo receber uma Promise em vez do
+ * array já resolvido (ex: esquecimento de "await" em bot.js),
+ * resolve automaticamente em vez de quebrar com
+ * "cotacoes.filter is not a function".
+ */
+async function resolverCotacoes(cotacoes) {
+    const resolvido = await Promise.resolve(cotacoes);
+    if (!Array.isArray(resolvido)) {
+        throw new Error('cotacoes precisa ser um array (ou Promise que resolve para um array)');
+    }
+    return resolvido;
+}
+
 // ------------------------------------------------------------
 // LIMIARES DE CLASSIFICAÇÃO
 // ------------------------------------------------------------
@@ -76,17 +90,19 @@ function ehRelevante(variacaoPercentual) {
 // ------------------------------------------------------------
 
 /**
- * Gera um ranking dos ativos com maior variação absoluta,
- * a partir da lista de cotações já buscadas (ver mercado.js).
- * Ignora ativos com erro de busca e ativos abaixo do limite
- * de relevância.
+ * Classifica TODAS as cotações bem-sucedidas (sem filtrar por
+ * relevância), adicionando intensidade e emoji descritivos.
+ * Usada quando o bot precisa exibir a lista completa de ativos
+ * (não só os destaques do ranking).
  *
- * @param {Array} cotacoes - resultado de buscarMultiplasCotacoes()
- * @returns {Array} ranking ordenado do maior para o menor movimento absoluto
+ * @param {Array|Promise<Array>} cotacoes - resultado de buscarMultiplasCotacoes()
+ * @returns {Promise<Array>}
  */
-function gerarRanking(cotacoes) {
-    return cotacoes
-        .filter((c) => c.sucesso && ehRelevante(c.variacaoPercentual))
+async function classificarCotacoes(cotacoes) {
+    const lista = await resolverCotacoes(cotacoes);
+
+    return lista
+        .filter((c) => c.sucesso)
         .map((c) => ({
             ticker: c.ticker,
             nome: c.nome,
@@ -96,7 +112,23 @@ function gerarRanking(cotacoes) {
             emoji: emojiDirecao(c.variacaoPercentual),
             moeda: c.moeda,
             mercado: c.mercado,
-        }))
+        }));
+}
+
+/**
+ * Gera um ranking dos ativos com maior variação absoluta,
+ * a partir da lista de cotações já buscadas (ver mercado.js).
+ * Ignora ativos com erro de busca e ativos abaixo do limite
+ * de relevância.
+ *
+ * @param {Array|Promise<Array>} cotacoes - resultado de buscarMultiplasCotacoes()
+ * @returns {Promise<Array>} ranking ordenado do maior para o menor movimento absoluto
+ */
+async function gerarRanking(cotacoes) {
+    const classificadas = await classificarCotacoes(cotacoes);
+
+    return classificadas
+        .filter((c) => ehRelevante(c.variacaoPercentual))
         .sort((a, b) => Math.abs(b.variacaoPercentual) - Math.abs(a.variacaoPercentual));
 }
 
@@ -139,9 +171,10 @@ function converterParaBRL(preco, moeda, cotacaoUSDBRL) {
  * @returns {Promise<object>} { cotacaoUSDBRL, itens }
  */
 async function gerarRelatorioOrcamento(orcamentoBRL, cotacoes) {
+    const lista = await resolverCotacoes(cotacoes);
     const cotacaoUSDBRL = await buscarCotacaoUSDBRL();
 
-    const itens = cotacoes
+    const itens = lista
         .filter((c) => c.sucesso)
         .map((c) => {
             const precoConvertidoBRL = converterParaBRL(
@@ -192,10 +225,11 @@ function formatarLinhaOrcamento(item) {
  * @param {Array} cotacoes - resultado de buscarMultiplasCotacoes()
  */
 async function gerarRelatorioVarredura(orcamentoBRL, cotacoes) {
-    const ranking = gerarRanking(cotacoes);
-    const relatorioOrcamento = await gerarRelatorioOrcamento(orcamentoBRL, cotacoes);
+    const lista = await resolverCotacoes(cotacoes);
+    const ranking = await gerarRanking(lista);
+    const relatorioOrcamento = await gerarRelatorioOrcamento(orcamentoBRL, lista);
 
-    const erros = cotacoes
+    const erros = lista
         .filter((c) => !c.sucesso)
         .map((c) => ({ ticker: c.ticker, erro: c.erro }));
 
@@ -213,6 +247,7 @@ module.exports = {
     classificarIntensidade,
     emojiDirecao,
     ehRelevante,
+    classificarCotacoes,
     gerarRanking,
     converterParaBRL,
     gerarRelatorioOrcamento,
