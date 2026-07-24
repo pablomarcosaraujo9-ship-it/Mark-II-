@@ -1,34 +1,39 @@
 const mercado = require('./mercado');
 
-async function rodarAnalise() {
-    try {
-        const dados = await mercado.buscarCotacoes();
-        
-        if (!dados.sucesso) {
-            return `Erro ao buscar cotações: ${dados.erro}`;
-        }
-
-        let texto = '📈 TOP 5 ALTAS DO DIA:\n\n';
-        
-        dados.altas.forEach((acao, i) => {
-            texto += `${i + 1}. ${acao.ticker} - ${acao.variacao}%\n`;
-            texto += `   R$ ${acao.preco.toFixed(2)}\n\n`;
-        });
-
-        texto += '📉 TOP 5 BAIXAS DO DIA:\n\n';
-        
-        dados.baixas.forEach((acao, i) => {
-            texto += `${i + 1}. ${acao.ticker} - ${acao.variacao}%\n`;
-            texto += `   R$ ${acao.preco.toFixed(2)}\n\n`;
-        });
-
-        return texto;
-        
-    } catch (erro) {
-        return `Erro na análise: ${erro.message}`;
+module.exports = async (req, res) => {
+  try {
+    // Pega os dados do mercado usando a função certa
+    const dados = await mercado.buscarDadosMercado();
+    
+    // Filtra só ações com sinal de COMPRA
+    const compras = dados.filter(acao => acao.sinal === 'COMPRA');
+    
+    // Ordena por potencial de alta e pega as TOP 5
+    const top5 = compras
+      .sort((a, b) => b.potencial - a.potencial)
+      .slice(0, 5);
+    
+    // Monta o texto de resposta
+    let texto = `📊 TOP 5 AÇÕES PARA HOJE\n\n`;
+    
+    if (top5.length === 0) {
+      texto += `Nenhuma oportunidade de COMPRA encontrada agora.`;
+    } else {
+      top5.forEach((acao, index) => {
+        texto += `${index + 1}. ${acao.ticker}\n`;
+        texto += `   Preço: R$ ${acao.preco.toFixed(2)}\n`;
+        texto += `   Potencial: ${acao.potencial}%\n`;
+        texto += `   Alvo: R$ ${acao.alvo.toFixed(2)}\n\n`;
+      });
     }
-}
-
-module.exports = {
-    rodarAnalise: rodarAnalise
+    
+    // Retorna o JSON
+    res.status(200).json({ texto });
+    
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ 
+      texto: `Erro na análise: ${error.message}` 
+    });
+  }
 };
