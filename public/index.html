@@ -1,13 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA Web</title>
+<style>
+  body {
+    background: #111;
+    color: #eee;
+    font-family: sans-serif;
+    padding: 20px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.8em;
+  }
+  button {
+    background: #1e88e5;
+    color: white;
+    border: none;
+    padding: 14px;
+    width: 100%;
+    font-size: 1.1em;
+    border-radius: 8px;
+    margin: 10px 0;
+  }
+  input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1.1em;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #222;
+    color: #eee;
+    box-sizing: border-box;
+  }
+  #saida {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    font-family: monospace;
+  }
+  img {
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1>NOVA._.📈 Web</h1>
+
+<button onclick="rodarInvestir()">Rodar /investir</button>
+
+<input id="ticker" type="text" placeholder="PETR4.SA" value="PETR4.SA">
+<button onclick="verGrafico()">Ver Gráfico</button>
+
+<div id="saida">Clique em um botão...</div>
+<img id="grafico" src="">
+
+<script>
+async function rodarInvestir(){
+    document.getElementById('saida').innerText = 'Buscando dados de mercado...';
+    document.getElementById('grafico').src = '';
+    try {
+        let r = await fetch('/api/investir');
+        let data = await r.json();
+        document.getElementById('saida').innerText = data.texto || 'Sem resposta.';
+    } catch (e) {
+        document.getElementById('saida').innerText = 'Erro ao buscar dados: ' + e.message;
+    }
+}
+
 async function verGrafico(){
     let ticker = document.getElementById('ticker').value;
     document.getElementById('saida').innerText = 'Buscando ' + ticker + '...';
     document.getElementById('grafico').src = '';
-    let r = await fetch('/api/grafico?ticker=' + ticker);
-    let data = await r.json();
-    if(data.url){  // MUDEI DE 'imagem' PRA 'url'
-        document.getElementById('saida').innerText = data.texto;
-        document.getElementById('grafico').src = data.url;  // URL DIRETO, SEM BASE64
-    } else {
-        document.getElementById('saida').innerText = data.texto || 'Erro ao gerar gráfico';
+    try {
+        let r = await fetch('/api/grafico?ticker=' + ticker);
+        let data = await r.json();
+        if (data.url) {
+            document.getElementById('saida').innerText = data.texto;
+            document.getElementById('grafico').src = data.url;
+        } else {
+            document.getElementById('saida').innerText = data.texto || 'Erro ao gerar gráfico';
+        }
+    } catch (e) {
+        document.getElementById('saida').innerText = 'Erro ao buscar gráfico: ' + e.message;
     }
 }
+</script>
+
+</body>
+</html>
