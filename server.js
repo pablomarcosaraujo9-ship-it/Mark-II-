@@ -9,46 +9,43 @@ const mercado = require('./mercado.js');
 app.use(express.static('public'));
 app.use(express.json());
 
-// LISTA DE ATIVOS PRA VARREDURA - EDITA AQUI
+// EDITA A LISTA DE TICKERS AQUI
 const TICKERS_VARREDURA = [
-  'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'AAPL', 'MSFT'
+  'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'BBAS3.SA', 'AAPL', 'MSFT'
 ];
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// MUDEI PRA /api/investir PRA BATER COM O FRONTEND
+// ROTA DO BOTÃO "Rodar /investir" - AGORA COM /api
 app.get('/api/investir', async (req, res) => {
   try {
-    // AGORA PASSA A LISTA DE TICKERS
+    // PASSA A LISTA DE TICKERS - ISSO QUE TRAVAVA O "Carregando..."
     const cotacoes = await mercado.buscarMultiplasCotacoes(TICKERS_VARREDURA);
-    
     const resultado = analise.gerarRelatorioVarredura(cotacoes, null);
-    
     res.json({ texto: resultado });
   } catch (e) {
     res.json({ texto: 'Erro no /investir: ' + e.message });
   }
 });
 
-// MUDEI PRA /api/grafico PRA BATER COM O FRONTEND
+// ROTA DO BOTÃO "Ver Gráfico" - AGORA COM /api
 app.get('/api/grafico', async (req, res) => {
   try {
     const ticker = req.query.ticker || 'PETR4.SA';
-    
     const historico = await grafico.buscarHistorico(ticker);
     
     if (!historico.sucesso) {
       return res.json({ texto: 'Erro: ' + historico.erro });
     }
     
+    // AJUSTEI PRA BATER COM SEU HTML QUE ESPERA data.imagem
     const urlGrafico = grafico.gerarUrlGrafico(ticker, historico.datas, historico.precos);
-    const urlYahoo = grafico.gerarUrlYahooFinance(ticker);
     
     res.json({ 
-      urlGrafico: urlGrafico,
-      urlYahoo: urlYahoo 
+      imagem: urlGrafico, // seu HTML espera 'imagem' em base64
+      texto: `Gráfico de ${ticker}`
     });
   } catch (e) {
     res.json({ texto: 'Erro no /grafico: ' + e.message });
