@@ -18,6 +18,30 @@ const TWELVEDATA_API_KEY = process.env.TWELVEDATA_API_KEY;
 const BRAPI_BASE_URL = 'https://brapi.dev/api';
 const TWELVEDATA_BASE_URL = 'https://api.twelvedata.com';
 
+// ------------------------------------------------------------
+// CACHE (Fase 3 do roadmap)
+// ------------------------------------------------------------
+// Guarda em memória o resultado da última varredura completa e
+// da última cotação USD/BRL, evitando refazer todas as chamadas
+// às APIs a cada /investir. Se os dados tiverem menos de 10
+// minutos, reutiliza o cache; caso contrário, busca de novo.
+//
+// OBS: por ser em memória, o cache reseta a cada restart/deploy
+// do Azure — isso é esperado e não é um bug.
+
+const CACHE_DURACAO_MS = 10 * 60 * 1000; // 10 minutos
+
+const cacheCotacoes = new Map(); // chave: lista de tickers ordenada -> { dados, timestamp }
+let cacheUSDBRL = null; // { valor, timestamp }
+
+function gerarChaveCacheCotacoes(tickers) {
+    return tickers.slice().sort().join(',');
+}
+
+function cacheEstaValido(timestamp) {
+    return timestamp && (Date.now() - timestamp) < CACHE_DURACAO_MS;
+}
+
 /**
  * Busca cotação de um ticker brasileiro via Brapi.
  * Recebe o ticker JÁ SEM o sufixo ".SA" (ex: "PETR4").
@@ -88,6 +112,11 @@ async function buscarCotacaoGlobal(ticker) {
  * Retorna um número (ex: 5.42) ou lança erro se não conseguir obter.
  */
 async function buscarCotacaoUSDBRL() {
+    if (cacheUSDBRL && cacheEstaValido(cacheUSDBRL.timestamp)) {
+        console.log(`📦 Usando cache da cotação USD/BRL (idade: ${Math.round((Date.now() - cacheUSDBRL.timestamp) / 1000)}s)`);
+        return cacheUSDBRL.valor;
+    }
+
     try {
         const url = `${TWELVEDATA_BASE_URL}/exchange_rate?symbol=USD/BRL&apikey=${TWELVEDATA_API_KEY}`;
         const resposta = await fetch(url);
@@ -99,6 +128,7 @@ async function buscarCotacaoUSDBRL() {
             throw new Error(dados.message || 'Não foi possível obter a cotação USD/BRL');
         }
 
+        cacheUSDBRL = { valor: cotacao, timestamp: Date.now() };
         return cotacao;
     } catch (erro) {
         // Repropaga o erro para quem chamou decidir como tratar
@@ -124,6 +154,14 @@ async function buscarCotacao(ticker) {
  * respeitar limites de requisições por minuto de ambas as APIs.
  */
 async function buscarMultiplasCotacoes(tickers) {
+    const chave = gerarChaveCacheCotacoes(tickers);
+    const cacheado = cacheCotacoes.get(chave);
+
+    if (cacheado && cacheEstaValido(cacheado.timestamp)) {
+        console.log(`📦 Usando cache da varredura (idade: ${Math.round((Date.now() - cacheado.timestamp) / 1000)}s)`);
+        return cacheado.dados;
+    }
+
     const resultados = [];
     const INTERVALO_MS = 8000; // ~8s entre chamadas
 
@@ -136,6 +174,7 @@ async function buscarMultiplasCotacoes(tickers) {
         }
     }
 
+    cacheCotacoes.set(chave, { dados: resultados, timestamp: Date.now() });
     return resultados;
 }
 
