@@ -178,8 +178,50 @@ async function buscarMultiplasCotacoes(tickers) {
     return resultados;
 }
 
+/**
+ * NOVO — Versão em lotes paralelos, usada pelo site (Vercel).
+ * A Vercel no plano grátis corta a função em 10s, então não dá
+ * pra usar o mesmo intervalo de 8s entre CADA ticker (levaria
+ * uns 200s para 25 ativos). Aqui busca vários ao mesmo tempo,
+ * em lotes pequenos, com uma pausa curta entre lotes — mais
+ * rápido, mas ainda com algum cuidado para não estourar o limite
+ * de requisições por segundo das APIs.
+ *
+ * NÃO é usada pelo bot.js (que continua com buscarMultiplasCotacoes,
+ * sequencial) — só pelo endpoint do site.
+ *
+ * @param {Array} tickers
+ * @param {number} tamanhoLote - quantos tickers buscar em paralelo por vez
+ * @param {number} intervaloLoteMs - pausa entre lotes
+ */
+async function buscarMultiplasCotacoesParalelo(tickers, tamanhoLote = 5, intervaloLoteMs = 800) {
+    const chave = gerarChaveCacheCotacoes(tickers);
+    const cacheado = cacheCotacoes.get(chave);
+
+    if (cacheado && cacheEstaValido(cacheado.timestamp)) {
+        console.log(`📦 Usando cache da varredura - paralelo (idade: ${Math.round((Date.now() - cacheado.timestamp) / 1000)}s)`);
+        return cacheado.dados;
+    }
+
+    const resultados = [];
+
+    for (let i = 0; i < tickers.length; i += tamanhoLote) {
+        const lote = tickers.slice(i, i + tamanhoLote);
+        const dadosLote = await Promise.all(lote.map((ticker) => buscarCotacao(ticker)));
+        resultados.push(...dadosLote);
+
+        if (i + tamanhoLote < tickers.length) {
+            await new Promise((resolve) => setTimeout(resolve, intervaloLoteMs));
+        }
+    }
+
+    cacheCotacoes.set(chave, { dados: resultados, timestamp: Date.now() });
+    return resultados;
+}
+
 module.exports = {
     buscarCotacao,
     buscarMultiplasCotacoes,
+    buscarMultiplasCotacoesParalelo,
     buscarCotacaoUSDBRL,
 };
