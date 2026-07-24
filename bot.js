@@ -147,7 +147,7 @@ bot.on('text', async (ctx) => {
             await ctx.reply(relatorio, { parse_mode: 'Markdown' });
 
             if (valorInformado) {
-                const textoOrcamento = analise.gerarRelatorioOrcamento(cotacoes, valorInformado);
+                const textoOrcamento = await analise.gerarRelatorioOrcamento(cotacoes, valorInformado);
                 await ctx.reply(textoOrcamento, { parse_mode: 'Markdown' });
             }
 
