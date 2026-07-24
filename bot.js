@@ -37,8 +37,8 @@ bot.start((ctx) => ctx.reply(
     "/grafico — gráfico dos últimos 30 dias de um ativo\n" +
     "/scanner — análise individual (preço + fundamentos, quando disponíveis)\n" +
     "/carteira — ver sua carteira (meta vs. atual)\n" +
-    "/carteira_add — adicionar ativo à carteira\n" +
-    "/carteira_remover — remover ativo da carteira",
+    "`/carteira_add` — adicionar ativo à carteira\n" +
+    "`/carteira_remover` — remover ativo da carteira",
     { parse_mode: 'Markdown' }
 ));
 
@@ -98,7 +98,7 @@ bot.command('carteira', async (ctx) => {
     }
 });
 
-bot.command('carteira_add', async (ctx) => {
+bot.command(['carteira_add', 'carteiraadd'], async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_carteira_add' });
     await ctx.reply(
         "➕ Qual ativo você quer adicionar à carteira?\n\n(Ex: `HSBC`, `PETR4.SA`, `VOO`)",
@@ -106,7 +106,7 @@ bot.command('carteira_add', async (ctx) => {
     );
 });
 
-bot.command('carteira_remover', async (ctx) => {
+bot.command(['carteira_remover', 'carteiraremover'], async (ctx) => {
     estadoConversa.set(ctx.chat.id, { etapa: 'aguardando_ticker_carteira_remover' });
     await ctx.reply(
         "➖ Qual ativo você quer remover da carteira?\n\n(Digite o ticker, ex: `HSBC`)",
